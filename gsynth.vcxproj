@@ -153,6 +153,7 @@
   <ItemGroup>
     <ClCompile Include="audiobuffer.cpp" />
     <ClCompile Include="audiolayer.cpp" />
+    <ClCompile Include="kiss_fft.c" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="pa_layer.cpp" />
     <ClCompile Include="ringbuffer.cpp" />
@@ -160,6 +161,8 @@
   <ItemGroup>
     <ClInclude Include="audiobuffer.h" />
     <ClInclude Include="audiolayer.h" />
+    <ClInclude Include="kiss_fft.h" />
+    <ClInclude Include="kiss_fft_guts.h" />
     <ClInclude Include="Log.hpp" />
     <ClInclude Include="pa_layer.h" />
     <ClInclude Include="ringbuffer.h" />

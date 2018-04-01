@@ -29,6 +29,9 @@
     <ClCompile Include="ringbuffer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="kiss_fft.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pa_layer.h">
@@ -44,6 +47,12 @@
       <Filter>Header files</Filter>
     </ClInclude>
     <ClInclude Include="Log.hpp">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="kiss_fft_guts.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
+    <ClInclude Include="kiss_fft.h">
       <Filter>Header files</Filter>
     </ClInclude>
   </ItemGroup>
