@@ -152,6 +152,64 @@ double getFloatPrecision(const double& value, const double& precision)
     return (floor((value * pow(10, precision) + 0.5)) / pow(10, precision));
 }
 
+void FFT(double* data, unsigned long nn)
+{
+    unsigned long n, mmax, m, j, istep, i;
+    double wtemp, wr, wpr, wpi, wi, theta;
+    double tempr, tempi;
+
+    // reverse-binary reindexing
+    n = nn << 1;
+
+    j = 1;
+    for (i = 1; i<n; i += 2) {
+        if (j>i) {
+            if (j - 1 > 0 && j < nn &&
+                i - 1 > 0 && i < nn) {
+                swap(data[j], data[i]);
+                swap(data[j - 1], data[i - 1]);
+            }
+        }
+        m = nn;
+        while (m >= 2 && j>m) {
+            j -= m;
+            m >>= 1;
+        }
+        j += m;
+    };
+
+    // here begins the Danielson-Lanczos section
+    mmax = 2;
+    while (n>mmax) {
+        istep = mmax << 1;
+        theta = -(2 * M_PI / mmax);
+        wtemp = sin(0.5*theta);
+        wpr = -2.0*wtemp*wtemp;
+        wpi = sin(theta);
+        wr = 1.0;
+        wi = 0.0;
+        for (m = 1; m < mmax; m += 2) {
+            for (i = m; i <= n; i += istep) {
+                if (j - 1 > 0 && j < nn &&
+                    i - 1 > 0 && i < nn) {
+                    j = i + mmax;
+                    tempr = wr*data[j - 1] - wi*data[j];
+                    tempi = wr * data[j] + wi*data[j - 1];
+
+                    data[j - 1] = data[i - 1] - tempr;
+                    data[j] = data[i] - tempi;
+                    data[i - 1] += tempr;
+                    data[i] += tempi;
+                }
+            }
+            wtemp = wr;
+            wr += wr*wpr - wi*wpi;
+            wi += wi*wpr + wtemp*wpi;
+        }
+        mmax = istep;
+    }
+}
+
 int
 PortAudioLayer::PortAudioLayerImpl::paOutputCallback(   PortAudioLayer& parentLayer,
                                                         const AudioSample* inputBuffer,
@@ -179,14 +237,39 @@ PortAudioLayer::PortAudioLayerImpl::paOutputCallback(   PortAudioLayer& parentLa
     static double gain = 0.2f;
     static double freq = 440.0f;
     auto elapsedTimePerFrame = 1.0 / static_cast<double>(parentLayer.audioFormat_.sample_rate);
+    auto periodFrames = static_cast<int>((1.0 / freq) / elapsedTimePerFrame);
+
+    constexpr unsigned long bufferSize = 128;
+    double buf[bufferSize];
+    unsigned long i = 0;
 
     for (; parentLayer.outFrame_ < endOutFrame; parentLayer.outFrame_++) {
-        auto t = parentLayer.outFrame_ * elapsedTimePerFrame;
-
-        auto value = sin(2 * M_PI * t * freq );
+        auto t = (parentLayer.outFrame_ % periodFrames) * elapsedTimePerFrame;
+        auto value = sin(2 * M_PI * t * freq);
         auto int16Data = static_cast<AudioSample>(value * gain * 32768.0f);
-        *out++ = int16Data;
-        *out++ = int16Data;
+        //*out++ = int16Data;
+        //*out++ = int16Data;
+
+        // for FFT
+        if (i < bufferSize) {
+            //DBGOUT("i:%d, v:%0.2f", i, value);
+            buf[i] = value;
+            buf[i + 1] = 0.0;
+            i += 2;
+        }
+    }
+
+    for (i = 0; i < bufferSize; i += 2) {
+        //DBGOUT("i:%d, a:%0.2f b:%0.2f", i, buf[i], buf[i + 1]);
+    }
+
+    if (framesPerBuffer >= bufferSize) {
+        // compute FFT
+        FFT(buf, bufferSize);
+    }
+
+    for (i = 0; i < bufferSize; i += 2) {
+        DBGOUT("i:%d, a:%0.2f b:%0.2f", i, buf[i], buf[i+1]);
     }
 
     return paContinue;
@@ -275,7 +358,7 @@ openStreamDevice(PaStream** stream,
     params.suggestedLatency = is_out ? device_info->defaultLowOutputLatency : device_info->defaultLowInputLatency;
     params.hostApiSpecificStreamInfo = nullptr;
 
-    auto outRate = 44100;
+    auto outRate = 48000;
 
     auto err = Pa_OpenStream(
         stream,

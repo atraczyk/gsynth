@@ -4,6 +4,7 @@
 
 #include "pa_layer.h"
 #include "Log.hpp"
+#include "fftw-3.3.7\api\fftw3.h"
 
 #include "kiss_fft.h"
 
@@ -44,9 +45,9 @@ void TestFft(const char* title, const kiss_fft_cpx in[N], kiss_fft_cpx out[N])
 
 int main(void)
 {
-    /*PortAudioLayer pa;
+    //PortAudioLayer pa;
 
-    pa.startStream();
+    /*pa.startStream();
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     pa.stopStream();*/
 
@@ -93,6 +94,16 @@ int main(void)
     auto fundFreq = (fundValue / N) * SR;
     DBGOUT("fundamental freq: %0.4f", fundFreq);
     //DBGOUT("fundamental freq: %0.4f, diff: %0.4f", fundFreq, fundFreq - FR1);
+
+    //constexpr const int N = 2;
+    //fftw_complex *in, *out;
+    //fftw_plan p;
+    //in = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
+    //out = (fftw_complex*)fftw_malloc(sizeof(fftw_complex) * N);
+    //p = fftw_plan_dft_1d(N, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+    //fftw_execute(p); /* repeat as needed */
+    //fftw_destroy_plan(p);
+    //fftw_free(in); fftw_free(out);
 
     system("pause");
     return 0;
