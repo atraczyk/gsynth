@@ -246,4 +246,5 @@ _Pvt_Extensions
 
 !config.h
 portaudio/
+!src/audio/portaudio/
 fftw*/
