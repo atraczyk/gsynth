@@ -29,8 +29,8 @@ protected:
     };
 
 public:
-
     AudioLayer();
+    AudioLayer(AudioFormat out_format, AudioFormat in_format);
     virtual ~AudioLayer();
 
     virtual void startStream() = 0;
@@ -102,6 +102,11 @@ public:
 
     AudioFormat getFormat() const {
         return audioFormat_;
+    }
+
+    AudioFormat getInputFormat() const
+    {
+        return audioInputFormat_;
     }
 
 protected:

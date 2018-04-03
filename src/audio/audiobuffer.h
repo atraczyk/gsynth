@@ -7,7 +7,7 @@
 
 #include <ciso646>
 
-typedef int16_t AudioSample;
+using AudioSample = int16_t;
 static const constexpr unsigned DEFAULT_SAMPLE_RATE = 44100;
 
 struct AudioFormat {

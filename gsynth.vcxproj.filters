@@ -5,55 +5,66 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    <Filter Include="Source Files\audio">
+      <UniqueIdentifier>{36e6faab-3a79-4934-8f2d-422c3f4d26b6}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header files">
-      <UniqueIdentifier>{10f3072f-f4e9-41af-add6-2b19fe5181ae}</UniqueIdentifier>
+    <Filter Include="Source Files\audio\portaudio">
+      <UniqueIdentifier>{36fc6079-d338-4d25-b6fc-cff8792cb2e3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\fft">
+      <UniqueIdentifier>{29f032a6-e16a-43d7-bf19-d844370c842f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\fft\kiss_fft">
+      <UniqueIdentifier>{f7633afa-32a9-42cc-8f15-ea724bd621ab}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
+    <ClCompile Include="src\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="pa_layer.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\audio\audiolayer.cpp">
+      <Filter>Source Files\audio</Filter>
     </ClCompile>
-    <ClCompile Include="audiobuffer.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\audio\ringbuffer.cpp">
+      <Filter>Source Files\audio</Filter>
     </ClCompile>
-    <ClCompile Include="audiolayer.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\audio\audiobuffer.cpp">
+      <Filter>Source Files\audio</Filter>
     </ClCompile>
-    <ClCompile Include="ringbuffer.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\audio\portaudio\pa_layer.cpp">
+      <Filter>Source Files\audio\portaudio</Filter>
     </ClCompile>
-    <ClCompile Include="kiss_fft.c">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="src\fft\kiss_fft\kiss_fft.c">
+      <Filter>Source Files\fft\kiss_fft</Filter>
+    </ClCompile>
+    <ClCompile Include="src\fft\fft.cpp">
+      <Filter>Source Files\fft</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="pa_layer.h">
-      <Filter>Header files</Filter>
+    <ClInclude Include="src\Log.hpp">
+      <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="audiobuffer.h">
-      <Filter>Header files</Filter>
+    <ClInclude Include="src\audio\audiobuffer.h">
+      <Filter>Source Files\audio</Filter>
     </ClInclude>
-    <ClInclude Include="audiolayer.h">
-      <Filter>Header files</Filter>
+    <ClInclude Include="src\audio\audiolayer.h">
+      <Filter>Source Files\audio</Filter>
     </ClInclude>
-    <ClInclude Include="ringbuffer.h">
-      <Filter>Header files</Filter>
+    <ClInclude Include="src\audio\ringbuffer.h">
+      <Filter>Source Files\audio</Filter>
     </ClInclude>
-    <ClInclude Include="Log.hpp">
-      <Filter>Header files</Filter>
+    <ClInclude Include="src\audio\portaudio\pa_layer.h">
+      <Filter>Source Files\audio\portaudio</Filter>
     </ClInclude>
-    <ClInclude Include="kiss_fft_guts.h">
-      <Filter>Header files</Filter>
+    <ClInclude Include="src\fft\kiss_fft\kiss_fft.h">
+      <Filter>Source Files\fft\kiss_fft</Filter>
     </ClInclude>
-    <ClInclude Include="kiss_fft.h">
-      <Filter>Header files</Filter>
+    <ClInclude Include="src\fft\kiss_fft\kiss_fft_guts.h">
+      <Filter>Source Files\fft\kiss_fft</Filter>
+    </ClInclude>
+    <ClInclude Include="src\fft\fft.h">
+      <Filter>Source Files\fft</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

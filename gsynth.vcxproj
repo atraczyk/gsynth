@@ -104,12 +104,12 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>portaudio/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>src;src/fft;src/fft/kiss_fft;src/audio;src/audio/portaudio;portaudio/include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>fftw3.lib;portaudio.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>portaudio\build\msvc\x64\Debug;x64\Debug\</AdditionalLibraryDirectories>
+      <AdditionalDependencies>portaudio.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>portaudio\build\msvc\x64\Debug</AdditionalLibraryDirectories>
       <ForceFileOutput>
       </ForceFileOutput>
     </Link>
@@ -141,7 +141,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>portaudio/include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>src;src/fft;src/fft/kiss_fft;src/audio;src/audio/portaudio;portaudio/include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -151,21 +151,23 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="audiobuffer.cpp" />
-    <ClCompile Include="audiolayer.cpp" />
-    <ClCompile Include="kiss_fft.c" />
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="pa_layer.cpp" />
-    <ClCompile Include="ringbuffer.cpp" />
+    <ClCompile Include="src\audio\audiobuffer.cpp" />
+    <ClCompile Include="src\audio\audiolayer.cpp" />
+    <ClCompile Include="src\audio\portaudio\pa_layer.cpp" />
+    <ClCompile Include="src\audio\ringbuffer.cpp" />
+    <ClCompile Include="src\fft\fft.cpp" />
+    <ClCompile Include="src\fft\kiss_fft\kiss_fft.c" />
+    <ClCompile Include="src\main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="audiobuffer.h" />
-    <ClInclude Include="audiolayer.h" />
-    <ClInclude Include="kiss_fft.h" />
-    <ClInclude Include="kiss_fft_guts.h" />
-    <ClInclude Include="Log.hpp" />
-    <ClInclude Include="pa_layer.h" />
-    <ClInclude Include="ringbuffer.h" />
+    <ClInclude Include="src\audio\audiobuffer.h" />
+    <ClInclude Include="src\audio\audiolayer.h" />
+    <ClInclude Include="src\audio\portaudio\pa_layer.h" />
+    <ClInclude Include="src\audio\ringbuffer.h" />
+    <ClInclude Include="src\fft\fft.h" />
+    <ClInclude Include="src\fft\kiss_fft\kiss_fft.h" />
+    <ClInclude Include="src\fft\kiss_fft\kiss_fft_guts.h" />
+    <ClInclude Include="src\Log.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

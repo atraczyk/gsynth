@@ -17,6 +17,18 @@ AudioLayer::AudioLayer()
 {
 }
 
+AudioLayer::AudioLayer(AudioFormat out_format, AudioFormat in_format)
+    : isCaptureMuted_(false)
+    , isPlaybackMuted_(false)
+    , captureGain_(1.0)
+    , playbackGain_(1.0)
+    , audioFormat_(out_format)
+    , audioInputFormat_(in_format)
+    //, resampler_(new Resampler{ audioFormat_.sample_rate })
+    , lastNotificationTime_()
+{
+}
+
 AudioLayer::~AudioLayer()
 {
 }
