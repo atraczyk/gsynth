@@ -28,9 +28,6 @@
     <ClCompile Include="src\audio\ringbuffer.cpp">
       <Filter>Source Files\audio</Filter>
     </ClCompile>
-    <ClCompile Include="src\audio\audiobuffer.cpp">
-      <Filter>Source Files\audio</Filter>
-    </ClCompile>
     <ClCompile Include="src\audio\portaudio\pa_layer.cpp">
       <Filter>Source Files\audio\portaudio</Filter>
     </ClCompile>
@@ -40,13 +37,13 @@
     <ClCompile Include="src\fft\fft.cpp">
       <Filter>Source Files\fft</Filter>
     </ClCompile>
+    <ClCompile Include="src\app.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Log.hpp">
       <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="src\audio\audiobuffer.h">
-      <Filter>Source Files\audio</Filter>
     </ClInclude>
     <ClInclude Include="src\audio\audiolayer.h">
       <Filter>Source Files\audio</Filter>
@@ -65,6 +62,9 @@
     </ClInclude>
     <ClInclude Include="src\fft\fft.h">
       <Filter>Source Files\fft</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app.h">
+      <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -5,6 +5,8 @@
 
 #include "audiolayer.h"
 
+using freqData = std::vector<std::pair<double, double>>;
+
 class PortAudioLayer: public AudioLayer {
 
 public:
@@ -13,11 +15,9 @@ public:
     ~PortAudioLayer();
 
     virtual void startStream();
-
     virtual void stopStream();
 
-    uint64_t outFrame_;
-    uint64_t inFrame_;
+    freqData getFrequencyData();
 
 private:
     PortAudioLayer(const PortAudioLayer&) = delete;

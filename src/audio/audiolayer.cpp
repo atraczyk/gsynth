@@ -12,8 +12,6 @@ AudioLayer::AudioLayer()
     , playbackGain_(1.0)
     , audioFormat_(AudioFormat::MONO())
     , audioInputFormat_(AudioFormat::MONO())
-    //, resampler_(new Resampler{ audioFormat_.sample_rate })
-    , lastNotificationTime_()
 {
 }
 
@@ -24,8 +22,6 @@ AudioLayer::AudioLayer(AudioFormat out_format, AudioFormat in_format)
     , playbackGain_(1.0)
     , audioFormat_(out_format)
     , audioInputFormat_(in_format)
-    //, resampler_(new Resampler{ audioFormat_.sample_rate })
-    , lastNotificationTime_()
 {
 }
 

@@ -151,7 +151,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\audio\audiobuffer.cpp" />
+    <ClCompile Include="src\app.cpp" />
     <ClCompile Include="src\audio\audiolayer.cpp" />
     <ClCompile Include="src\audio\portaudio\pa_layer.cpp" />
     <ClCompile Include="src\audio\ringbuffer.cpp" />
@@ -160,7 +160,7 @@
     <ClCompile Include="src\main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\audio\audiobuffer.h" />
+    <ClInclude Include="src\app.h" />
     <ClInclude Include="src\audio\audiolayer.h" />
     <ClInclude Include="src\audio\portaudio\pa_layer.h" />
     <ClInclude Include="src\audio\ringbuffer.h" />

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "audiobuffer.h"
 #include "ringbuffer.h"
 
 #include <chrono>
@@ -9,6 +8,30 @@
 #include <vector>
 #include <condition_variable>
 #include <atomic>
+
+using AudioSample = int16_t;
+static const constexpr unsigned DEFAULT_SAMPLE_RATE = 44100;
+
+struct AudioFormat {
+    unsigned sample_rate;
+    unsigned nb_channels;
+
+    constexpr AudioFormat(unsigned sr, unsigned c) : sample_rate(sr), nb_channels(c) {}
+
+    inline bool operator == (const AudioFormat &b) const
+    {
+        return ((b.sample_rate == sample_rate) && (b.nb_channels == nb_channels));
+    }
+
+    inline bool operator != (const AudioFormat &b) const
+    {
+        return !(*this == b);
+    }
+
+    static const AudioFormat NONE() { return AudioFormat{ 0, 0 }; }
+    static const AudioFormat MONO() { return AudioFormat{ DEFAULT_SAMPLE_RATE, 1 }; }
+    static const AudioFormat STEREO() { return AudioFormat{ DEFAULT_SAMPLE_RATE, 2 }; }
+};
 
 enum class DeviceType {
     PLAYBACK,
@@ -36,17 +59,6 @@ public:
     virtual void startStream() = 0;
     virtual void stopStream() = 0;
 
-    inline bool isStarted() const {
-        return status_ == Status::Started;
-    }
-
-    template< class Rep, class Period >
-    bool waitForStart(const std::chrono::duration<Rep, Period>& rel_time) const {
-        std::unique_lock<std::mutex> lk(mutex_);
-        startedCv_.wait_for(lk, rel_time, [&] {return isStarted(); });
-        return isStarted();
-    }
-
     void flushMain();
 
     bool isCaptureMuted() const {
@@ -65,17 +77,6 @@ public:
         isPlaybackMuted_ = muted;
     }
 
-    bool isRingtoneMuted() const {
-        return isRingtoneMuted_;
-    }
-
-    void muteRingtone(bool muted) {
-        isRingtoneMuted_ = muted;
-    }
-
-    /**
-    * Range: [-1.0, 1.0]
-    */
     void setCaptureGain(double gain) {
         captureGain_ = gain;
     }
@@ -84,11 +85,7 @@ public:
         return captureGain_;
     }
 
-    /**
-    * Range: [-1.0, 1.0]
-    */
-    void setPlaybackGain(double gain)
-    {
+    void setPlaybackGain(double gain) {
         playbackGain_ = gain;
     }
 
@@ -104,43 +101,21 @@ public:
         return audioFormat_;
     }
 
-    AudioFormat getInputFormat() const
-    {
+    AudioFormat getInputFormat() const {
         return audioInputFormat_;
     }
 
 protected:
-    bool isCaptureMuted_;
-    bool isPlaybackMuted_;
-    bool isRingtoneMuted_{ false };
+    bool isCaptureMuted_{ false };
+    bool isPlaybackMuted_{ false };
     double captureGain_;
     double playbackGain_;
 
-    AudioBuffer playbackBuffer_;
-    AudioBuffer playbackResampleBuffer_;
-
     std::atomic<Status> status_{ Status::Idle };
-    mutable std::condition_variable startedCv_;
 
     AudioFormat audioFormat_;
     AudioFormat audioInputFormat_;
 
     mutable std::mutex mutex_ { };
 
-    /**
-    * Remove audio offset that can be introduced by certain cheap audio device
-    */
-    //DcBlocker dcblocker_{};
-
-    /**
-    * Manage sampling rate conversion
-    */
-    //std::unique_ptr<Resampler> resampler_;
-
-private:
-
-    /**
-    * Time of the last incoming call notification
-    */
-    std::chrono::system_clock::time_point lastNotificationTime_;
 };
