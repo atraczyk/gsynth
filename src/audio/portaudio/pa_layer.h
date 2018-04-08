@@ -4,7 +4,6 @@
 #include <array>
 
 #include "audiolayer.h"
-#include "fft.h"
 
 class PortAudioLayer: public AudioLayer {
 
@@ -26,6 +25,4 @@ private:
 
     struct PortAudioLayerImpl;
     std::unique_ptr<PortAudioLayerImpl> pimpl_;
-
-    fft_wrapper fft_;
 };

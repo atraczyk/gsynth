@@ -1,6 +1,7 @@
 #include "pa_layer.h"
 
 #include "ringbuffer.h"
+#include "fft.h"
 #include "Log.hpp"
 
 #include <portaudio.h>
@@ -23,10 +24,12 @@ struct PortAudioLayer::PortAudioLayerImpl
 {
     PortAudioLayerImpl(PortAudioLayer&);
     ~PortAudioLayerImpl();
-
+    
     void init(PortAudioLayer&);
     void terminate() const;
     void initStream(PortAudioLayer&);
+
+    bool running_ = true;
 
     std::vector<std::string> getDeviceByType(bool) const;
 
@@ -38,7 +41,16 @@ struct PortAudioLayer::PortAudioLayerImpl
     std::shared_ptr<RingBuffer> primaryRingBuffer_;
     std::shared_ptr<RingBuffer> secondaryRingBuffer_;
 
+    bool canPlay_;
+
+    fft_wrapper fft_;
+    std::thread fftThread_;
+    std::mutex fftMutex_;
+    std::condition_variable fftCv_;
+
     std::array<PaStream*, static_cast<int>(Direction::End)> streams_;
+
+    void processFFT();
 
     int paOutputCallback(PortAudioLayer& userData,
                          const AudioSample* inputBuffer,
@@ -60,7 +72,6 @@ PortAudioLayer::PortAudioLayer()
     , pimpl_{ new PortAudioLayerImpl(*this) }
     , outFrame_(0)
     , inFrame_(0)
-    , fft_()
 {
 }
 
@@ -69,7 +80,6 @@ PortAudioLayer::PortAudioLayer(AudioFormat out_format, AudioFormat in_format)
     , pimpl_{ new PortAudioLayerImpl(*this) }
     , outFrame_(0)
     , inFrame_(0)
-    , fft_(out_format.sample_rate, out_format.sample_rate * 0.025, false)
 {
 }
 
@@ -119,6 +129,8 @@ PortAudioLayer::PortAudioLayerImpl::PortAudioLayerImpl(PortAudioLayer& parent)
     , indexOut_(paNoDevice)
     , primaryRingBuffer_(std::make_shared<RingBuffer>())
     , secondaryRingBuffer_(std::make_shared<RingBuffer>())
+    , fft_(parent.audioFormat_.sample_rate, parent.audioFormat_.sample_rate * 0.025, false)
+    , canPlay_(false)
 {
     init(parent);
 }
@@ -126,6 +138,9 @@ PortAudioLayer::PortAudioLayerImpl::PortAudioLayerImpl(PortAudioLayer& parent)
 PortAudioLayer::PortAudioLayerImpl::~PortAudioLayerImpl()
 {
     terminate();
+    running_ = false;
+    fftCv_.notify_all();
+    fftThread_.join();
 }
 
 std::vector<std::string>
@@ -181,43 +196,27 @@ PortAudioLayer::PortAudioLayerImpl::paOutputCallback(   PortAudioLayer& parentLa
     auto elapsedTimePerFrame = 1.0 / static_cast<double>(parentLayer.audioFormat_.sample_rate);
     auto periodFrames = static_cast<int>((1.0 / freq) / elapsedTimePerFrame);
 
-    auto bufSize = primaryRingBuffer_.get()->getBufSize();
-    AudioSample processed;
-    std::vector<double> data;
-    auto fftWindowSize = parentLayer.fft_.getWindowSize();
-    if (bufSize >= framesPerBuffer && bufSize >= fftWindowSize) {
-        while (data.size() <= fftWindowSize) {
-            if (!primaryRingBuffer_.get()->tryPop(&processed))
-                continue;
-            secondaryRingBuffer_.get()->tryPush(processed);
-            auto floatData = static_cast<double>(processed / 32768.0f);
-            data.emplace_back(floatData);
-        }
-        parentLayer.fft_.setRealInput(&data[0]);
-        auto freqs = parentLayer.fft_.computeFrequencies();
-
-        for (int i = 0; i < freqs.size(); i++) {
-            if (i == 0) {
-                DBGOUT("FREQ: i: %d, f: %0.4f, p: %0.4f ", i, freqs.at(i).first, freqs.at(i).second);
-            }
-            else if (i < 2) {
-                DBGOUT("freq: i: %d, f: %0.4f, p: %0.4f ", i, freqs.at(i).first, freqs.at(i).second);
-            }
-        }
-    }
-
     auto readyBufSize = secondaryRingBuffer_.get()->getBufSize();
     DBGOUT("readyBufSize: %d", readyBufSize);
-    if (readyBufSize >= framesPerBuffer) {
+    // avoid buffer underrun at start
+    if (readyBufSize >= framesPerBuffer * 2) {
+        canPlay_ = true;
+    }
+    if (readyBufSize >= framesPerBuffer && canPlay_) {
+        DBGOUT("playing buffer");
         for (; parentLayer.outFrame_ < endOutFrame; parentLayer.outFrame_++) {
             AudioSample processed;
+            //primaryRingBuffer_.get()->tryPop(&processed);
             secondaryRingBuffer_.get()->tryPop(&processed);
             *out++ = processed;
             *out++ = processed;
         }
     } else {
-        *out++ = 0;
-        *out++ = 0;
+        DBGOUT("output buffer underrun");
+        for (; parentLayer.outFrame_ < endOutFrame; parentLayer.outFrame_++) {
+            *out++ = 0;
+            *out++ = 0;
+        }
     }
 
     return paContinue;
@@ -256,11 +255,12 @@ PortAudioLayer::PortAudioLayerImpl::paInputCallback(    PortAudioLayer& parentLa
         auto int16Data = static_cast<AudioSample>(value * gain * 32768.0f);
 
         // generate sine test
-        primaryRingBuffer_.get()->tryPush(int16Data);
+        //primaryRingBuffer_.get()->tryPush(int16Data);
 
         // mic test
-        //primaryRingBuffer_.get()->tryPush(*in++);
+        primaryRingBuffer_.get()->tryPush(*in++);
     }
+    fftCv_.notify_all();
 
     return paContinue;
 }
@@ -415,6 +415,48 @@ PortAudioLayer::PortAudioLayerImpl::initStream(PortAudioLayer& parent)
             auto err = Pa_StartStream(st_ptr);
             if (err != paNoError)
                 DBGOUT("PortAudioLayer error : %s", Pa_GetErrorText(err));
+        }
+    }
+
+    DBGOUT("Start FFT Handler");
+    fftThread_ = std::thread(&PortAudioLayerImpl::processFFT, this);
+}
+
+void
+PortAudioLayer::PortAudioLayerImpl::processFFT()
+{
+    while (running_) {
+        std::unique_lock<std::mutex> lk(fftMutex_);
+        //DBGOUT("processFFT - waiting for buffer");
+        fftCv_.wait(lk, [this] {
+            //DBGOUT("getBufSize() %d, getWindowSize() %d", primaryRingBuffer_.get()->getBufSize(), fft_.getWindowSize());
+            return (primaryRingBuffer_.get()->getBufSize() >= fft_.getWindowSize()) || !running_;
+        });
+        //DBGOUT("processFFT - processing");
+        AudioSample processed;
+        auto bufSize = primaryRingBuffer_.get()->getBufSize();
+        std::vector<double> data;
+        auto fftWindowSize = fft_.getWindowSize();
+        //DBGOUT("bufSize: %d, framesPerBuffer %d, fftWindowSize %d", bufSize, framesPerBuffer, fftWindowSize);
+        if (bufSize >= fftWindowSize) {
+            while (data.size() <= fftWindowSize) {
+                if (!primaryRingBuffer_.get()->tryPop(&processed))
+                    continue;
+                secondaryRingBuffer_.get()->tryPush(processed);
+                auto floatData = static_cast<double>(processed / 32768.0f);
+                data.emplace_back(floatData);
+            }
+            fft_.setRealInput(&data[0]);
+            auto freqs = fft_.computeFrequencies();
+
+            for (int i = 0; i < freqs.size(); i++) {
+                if (i == 0) {
+                    DBGOUT("FREQ: i: %d, f: %0.4f, p: %0.4f ", i, freqs.at(i).first, freqs.at(i).second);
+                }
+                else if (i < 2) {
+                    DBGOUT("freq: i: %d, f: %0.4f, p: %0.4f ", i, freqs.at(i).first, freqs.at(i).second);
+                }
+            }
         }
     }
 }
