@@ -4,8 +4,7 @@
 #include <array>
 
 #include "audiolayer.h"
-
-using freqData = std::vector<std::pair<double, double>>;
+#include "fft.h"
 
 class PortAudioLayer: public AudioLayer {
 

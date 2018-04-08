@@ -5,7 +5,7 @@
 #include "Log.hpp"
 #include "kiss_fft.h"
 
-using namespace std;
+using freqData = std::vector<std::pair<double, double>>;
 
 class fft_wrapper
 {
@@ -16,7 +16,8 @@ public:
 
     void init(uint32_t sampleRate, uint32_t windowSize, bool isInverse);
     void setRealInput(const double * realData);
-    std::vector<std::pair<double, double>> computeFrequencies(bool sort = false, int bandLimit = 0);
+    std::vector<std::pair<double, double>> computeFrequencies(
+        bool sort = false, bool usethreshold = false, int bandLimit = 0);
 
     uint32_t getWindowSize() {
         return windowSize_;

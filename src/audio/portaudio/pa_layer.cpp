@@ -1,7 +1,6 @@
 #include "pa_layer.h"
 
 #include "ringbuffer.h"
-#include "fft.h"
 #include "Log.hpp"
 
 #include <portaudio.h>
@@ -245,7 +244,7 @@ PortAudioLayer::PortAudioLayerImpl::paInputCallback(    PortAudioLayer& parentLa
     auto endInFrame = inFrame_ + framesPerBuffer;
     AudioSample *in = (AudioSample*)inputBuffer;
 
-    static double gain = 0.5f;
+    static double gain = 1.0f;
     static double freq = 440.0f;
     auto elapsedTimePerFrame = 1.0 / static_cast<double>(parentLayer.audioFormat_.sample_rate);
     auto periodFrames = static_cast<int>((1.0 / freq) / elapsedTimePerFrame);
@@ -257,10 +256,10 @@ PortAudioLayer::PortAudioLayerImpl::paInputCallback(    PortAudioLayer& parentLa
         auto int16Data = static_cast<AudioSample>(value * gain * 32768.0f);
 
         // generate sine test
-        //inputBuffer_.get()->tryPush(int16Data);
+        inputBuffer_.get()->tryPush(int16Data);
 
         // mic test
-        inputBuffer_.get()->tryPush(*in++);
+        //inputBuffer_.get()->tryPush(*in++);
     }
     fftCv_.notify_all();
 
@@ -445,6 +444,6 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
             data.emplace_back(static_cast<double>(sample * 0.000030517578125f));
         }
         fft_.setRealInput(&data[0]);
-        currentFreqData_ = fft_.computeFrequencies();
+        currentFreqData_ = fft_.computeFrequencies(false, false, 128);
     }
 }

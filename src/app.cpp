@@ -50,20 +50,21 @@ void App::render()
     glClear(GL_COLOR_BUFFER_BIT);
 
     glLineWidth(2.5);
-    glColor4f(0.1f, 1.0f, 0.1f, 1.0f);
+    glColor4f(0.1f, 0.2f, 0.7f, 1.0f);
 
     glBegin(GL_LINES);
 
-    bool linearPlot = false;
+    bool linearPlot = true;
     double h;
-    auto barSize = 1.8f / frequencyData.size();
+    auto barSize = 2.0f / frequencyData.size();
     for (int i = 0; i < frequencyData.size(); i++) {
-        if (!linearPlot) {
-            h = (1.0f - std::min(1.0, frequencyData.at(i).second / -50.0f)) * 2.0f;
+        if (linearPlot) {
+            h = frequencyData.at(i).second * 2.0f;
         } else {
-            h = pow(10.0f, (frequencyData.at(i).second / 20.0f)) * 2.0f;
+            auto dB = 20 * log10(frequencyData.at(i).second);
+            h = (1.0f - std::min(1.0, dB / -60.0f)) * 2.0f;
         }
-        auto x = -0.9f + barSize * i;
+        auto x = -1.0f + barSize * i;
         glVertex3f(x, -1.0f, 0.0f);
         glVertex3f(x, -1.0f + h, 0.0f);
     }
