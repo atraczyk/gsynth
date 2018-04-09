@@ -27,29 +27,25 @@
 #undef min
 
 #ifdef _DEBUG
-#ifndef DBGOUT
-#ifdef _WIN32
-#define SEPERATOR '\\'
-#else
-#define SEPERATOR '/'
-#endif // _WIN32
-#ifndef _WIN32
-#define LOGGER(m, ...)          consoleLog(LOG_FORMAT(m, ## __VA_ARGS__))
-#define DBGOUT(m, ...)          consoleLog(m, ## __VA_ARGS__)
-#else
-#define FILENAME(X)              (strrchr(X, SEPERATOR) ? strrchr(X, SEPERATOR) + 1 : X)
-#define STR(EXP)                #EXP
-#define XSTR(X)                 STR(X)
-//#define LINE                  
-#define LOG_FORMAT(M, ...)      M, __VA_ARGS__
-#define LOGGER(m, ...)          consoleLog(__FILE__, " :" XSTR(__LINE__), LOG_FORMAT(m, __VA_ARGS__))
-#define DBGOUT(m, ...)          LOGGER(m, __VA_ARGS__)
-#endif
-#endif
-#else
-#define DBGOUT(m, ...)
-#endif
-
+ #ifndef DBGOUT
+  #ifdef _WIN32
+   #define SEPERATOR '\\'
+  #else
+   #define SEPERATOR '/'
+  #endif // _WIN32
+  #ifndef _WIN32
+   #define LOGGER(m, ...)          consoleLog(LOG_FORMAT(m, ## __VA_ARGS__))
+   #define DBGOUT(m, ...)          consoleLog(m, ## __VA_ARGS__)
+  #else
+   #define FILENAME(X)              (strrchr(X, SEPERATOR) ? strrchr(X, SEPERATOR) + 1 : X)
+   #define STR(EXP)                #EXP
+   #define XSTR(X)                 STR(X)
+   //#define LINE                  
+   #define LOG_FORMAT(M, ...)      M, __VA_ARGS__
+   #define LOGGER(m, ...)          consoleLog(__FILE__, " :" XSTR(__LINE__), LOG_FORMAT(m, __VA_ARGS__))
+   #define DBGOUT(m, ...)          LOGGER(m, __VA_ARGS__)
+  #endif
+ #endif
 static std::mutex logMutex;
 
 inline void
@@ -87,3 +83,6 @@ consoleLog(const char* filename, const char* lineno, char const *m, ...)
                 buffer,
                 ret);
 }
+#else
+ #define DBGOUT(m, ...)
+#endif

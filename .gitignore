@@ -248,3 +248,4 @@ _Pvt_Extensions
 portaudio/
 !src/audio/portaudio/
 SDL2*/
+gsynth

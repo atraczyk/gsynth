@@ -1,8 +1,8 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL2/SDL.h>
 #undef main
-#include <SDL_opengl.h>
+#include <SDL2/SDL_opengl.h>
 
 #include "pa_layer.h"
 
