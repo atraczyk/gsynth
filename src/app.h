@@ -1,8 +1,14 @@
 #pragma once
 
+#ifdef _WIN32
+#include <SDL.h>
+#include <SDL_opengl.h>
+#else
 #include <SDL2/SDL.h>
-#undef main
 #include <SDL2/SDL_opengl.h>
+#endif // _WIN32
+
+#undef main
 
 #include "pa_layer.h"
 

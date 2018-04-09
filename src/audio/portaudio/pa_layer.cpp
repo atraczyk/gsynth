@@ -470,7 +470,7 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
         }
         fft_.setRealInput(&data[0]);
         {
-            std::unique_lock<std::mutex> lk(freqDataMutex_);
+            std::lock_guard<std::mutex> lk(freqDataMutex_);
             currentFreqData_ = fft_.computeFrequencies(true, false, 32);
         }
     }
