@@ -42,7 +42,7 @@ bool App::initVideo()
 void App::render()
 {
     auto frequencyData = paLayer.getFrequencyData();
-    DBGOUT("FREQ.SIZE: %d", frequencyData.size());
+    //DBGOUT("FREQ.SIZE: %d", frequencyData.size());
 
     SDL_GL_MakeCurrent(window_, glContext_);
 
@@ -54,7 +54,7 @@ void App::render()
 
     glBegin(GL_LINES);
 
-    bool linearPlot = true;
+    bool linearPlot = false;
     double h;
     auto barSize = 2.0f / frequencyData.size();
     for (int i = 0; i < frequencyData.size(); i++) {
@@ -64,7 +64,7 @@ void App::render()
             auto dB = 20 * log10(frequencyData.at(i).second);
             h = (1.0f - std::min(1.0, dB / -60.0f)) * 2.0f;
         }
-        auto x = -1.0f + barSize * i;
+        auto x = -1.0f + barSize + barSize * i;
         glVertex3f(x, -1.0f, 0.0f);
         glVertex3f(x, -1.0f + h, 0.0f);
     }

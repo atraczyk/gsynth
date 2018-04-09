@@ -38,7 +38,7 @@ fft_wrapper::setRealInput(const double * realData)
 }
 
 std::vector<std::pair<double, double>>
-fft_wrapper::computeFrequencies(bool sort, bool usethreshold, int bandLimit)
+fft_wrapper::computeFrequencies(bool sort, bool useThreshold, int bandLimit)
 {
     std::vector<std::pair<double, double>> freqs;
 
@@ -67,7 +67,7 @@ fft_wrapper::computeFrequencies(bool sort, bool usethreshold, int bandLimit)
     }
 
     double threshold = 0.001; // -60.0; -60dB
-    auto applyThreshold = usethreshold && bandLimit;
+    auto applyThreshold = useThreshold && bandLimit;
     for (const auto& mi : magInds) {
         auto power = mi.first; // dB: 20 * log10(mi.first);
         if (applyThreshold && (power < threshold)) {

@@ -21,7 +21,7 @@ int main(int argc, char* argv[])
     App app(512, 512);
     app.execute(argc, argv);
 
-    system("pause");
+    //system("pause");
 
 #ifdef _WIN32
     CoUninitialize();

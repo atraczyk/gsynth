@@ -45,6 +45,8 @@ struct PortAudioLayer::PortAudioLayerImpl
     std::condition_variable fftCv_;
 
     freqData currentFreqData_;
+    std::mutex freqDataMutex_;
+
     uint64_t outFrame_;
     uint64_t inFrame_;
 
@@ -122,7 +124,12 @@ PortAudioLayer::stopStream()
 freqData
 PortAudioLayer::getFrequencyData()
 {
-    return pimpl_->currentFreqData_;
+    freqData ret;
+    {
+        std::lock_guard<std::mutex> lock(pimpl_->freqDataMutex_);
+        ret = pimpl_->currentFreqData_;
+    }
+    return ret;
 }
 
 PortAudioLayer::PortAudioLayerImpl::PortAudioLayerImpl(PortAudioLayer& parent)
@@ -192,23 +199,36 @@ PortAudioLayer::PortAudioLayerImpl::paOutputCallback(   PortAudioLayer& parentLa
         return paContinue;
     }
 
+    auto startOutFrame = outFrame_;
     auto endOutFrame = outFrame_ + framesPerBuffer;
     AudioSample *out = (AudioSample*)outputBuffer;
 
     auto readyBufSize = processedBuffer_.get()->getBufSize();
-    DBGOUT("readyBufSize: %d", readyBufSize);
+    //DBGOUT("readyBufSize: %d", readyBufSize);
     
     // avoid buffer underrun at start
     if (readyBufSize >= framesPerBuffer * 2) {
         canPlay_ = true;
     }
-    
+
     if (readyBufSize >= framesPerBuffer && canPlay_) {
-        DBGOUT("playing buffer");
+        auto frequencyData = parentLayer.getFrequencyData();
+        auto elapsedTimePerFrame = 1.0 / static_cast<double>(parentLayer.audioFormat_.sample_rate);
         for (; outFrame_ < endOutFrame; outFrame_++) {
+            auto t = (outFrame_)* elapsedTimePerFrame;
             AudioSample processed;
-            //inputBuffer_.get()->tryPop(&processed);
-            processedBuffer_.get()->tryPop(&processed);
+            //processedBuffer_.get()->tryPop(&processed);
+
+            // re-synthesis: accumulate mono sample value as the sum sine waves based on currentFreqData
+            double value = 0.0;
+            for (int i = 0; i < frequencyData.size() && i < 32; i++) {
+                value += frequencyData.at(i).second * sin(2 * M_PI * t * frequencyData.at(i).first);
+            }
+            value = sin(2 * M_PI * t * 440.0);
+            auto int16Data = static_cast<AudioSample>(value * 32768.0f);
+            *out++ = int16Data;
+            *out++ = int16Data;
+
             //*out++ = processed;
             //*out++ = processed;
         }
@@ -251,8 +271,8 @@ PortAudioLayer::PortAudioLayerImpl::paInputCallback(    PortAudioLayer& parentLa
 
     for (; inFrame_ < endInFrame; inFrame_++) {
         auto t = (inFrame_) * elapsedTimePerFrame;
-        auto value = sin(2 * M_PI * t * freq);
-        //auto value = 0.75 * sin(2 * M_PI * t * 354) + 0.75 * cos(2 * M_PI * t * 649);
+        //auto value = sin(2 * M_PI * t * freq);
+        auto value = 0.5 * sin(2 * M_PI * t * 354) + 0.5 * cos(2 * M_PI * t * 649);
         auto int16Data = static_cast<AudioSample>(value * gain * 32768.0f);
 
         // generate sine test
@@ -317,7 +337,7 @@ PortAudioLayer::PortAudioLayerImpl::terminate() const
 
 static AudioFormat
 openStreamDevice(PortAudioLayer& parent, PaStream** stream,
-    PaDeviceIndex device, Direction direction,
+    PaDeviceIndex device, Direction direction, uint32_t bufferLength,
     PaStreamCallback* callback, void* user_data)
 {
     auto is_out = direction == Direction::Output;
@@ -338,7 +358,7 @@ openStreamDevice(PortAudioLayer& parent, PaStream** stream,
         is_out ? nullptr : &params,
         is_out ? &params : nullptr,
         rate,
-        paFramesPerBufferUnspecified,
+        bufferLength,//paFramesPerBufferUnspecified,
         paNoFlag,
         callback,
         user_data);
@@ -363,6 +383,7 @@ PortAudioLayer::PortAudioLayerImpl::initStream(PortAudioLayer& parent)
             &streams_[Direction::Output],
             indexOut_,
             Direction::Output,
+            fft_.getWindowSize(),
             [] (const void* inputBuffer,
             void* outputBuffer,
             unsigned long framesPerBuffer,
@@ -390,6 +411,7 @@ PortAudioLayer::PortAudioLayerImpl::initStream(PortAudioLayer& parent)
             &streams_[Direction::Input],
             indexIn_,
             Direction::Input,
+            fft_.getWindowSize(),
             [] (const void* inputBuffer,
             void* outputBuffer,
             unsigned long framesPerBuffer,
@@ -437,13 +459,19 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
         AudioSample sample;
         std::vector<double> data;
         auto fftWindowSize = fft_.getWindowSize();
+        unsigned i = 0;
         while (data.size() <= fftWindowSize) {
             if (!inputBuffer_.get()->tryPop(&sample))
                 continue;
             processedBuffer_.get()->tryPush(sample);
-            data.emplace_back(static_cast<double>(sample * 0.000030517578125f));
+            auto hannWindowMult = 0.5 * (1.0 - cos(2.0 * M_PI * i / (fftWindowSize - 1.0)));
+            data.emplace_back(static_cast<double>(hannWindowMult * sample * 0.000030517578125f));
+            ++i;
         }
         fft_.setRealInput(&data[0]);
-        currentFreqData_ = fft_.computeFrequencies(false, false, 128);
+        {
+            std::unique_lock<std::mutex> lk(freqDataMutex_);
+            currentFreqData_ = fft_.computeFrequencies(true, false, 32);
+        }
     }
 }
