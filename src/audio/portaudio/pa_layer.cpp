@@ -2,6 +2,8 @@
 
 #include "ringbuffer.h"
 #include "Log.hpp"
+#include "filter.h"
+#include "common.h"
 
 #include <portaudio.h>
 
@@ -43,6 +45,8 @@ struct PortAudioLayer::PortAudioLayerImpl
     fftDataBlob currentFftData_;
     std::vector<double> currentFftInverse_;
     std::mutex fftDataMutex_;
+
+    LowPassFilter lpFilter;
 
     uint64_t outFrame_;
     uint64_t inFrame_;
@@ -138,6 +142,7 @@ PortAudioLayer::PortAudioLayerImpl::PortAudioLayerImpl(PortAudioLayer& parent)
     , canPlay_(false)
     , outFrame_(0)
     , inFrame_(0)
+    , lpFilter(parent.audioFormat_.sample_rate, 4000.0, 1.0, 8.0)
 {
     init(parent);
 }
@@ -458,13 +463,15 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
         }
         AudioSample sample;
         std::vector<double> data;
+        double value;
         auto fftWindowSize = fft_.getWindowSize();
         unsigned i = 0;
         while (data.size() <= fftWindowSize) {
             if (!inputBuffer_.get()->tryPop(&sample))
                 continue;
             processedBuffer_.get()->tryPush(sample);
-            data.emplace_back(static_cast<double>(sample * 0.000030517578125f));
+            value = lpFilter.processSample(sample * 0.000030517578125f);
+            data.emplace_back(static_cast<double>(value));
             ++i;
         }
         fft_.setRealInput(&data[0]);

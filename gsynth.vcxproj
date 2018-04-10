@@ -157,6 +157,7 @@
     <ClCompile Include="src\audio\ringbuffer.cpp" />
     <ClCompile Include="src\fft\fft.cpp" />
     <ClCompile Include="src\fft\kiss_fft\kiss_fft.c" />
+    <ClCompile Include="src\filter.cpp" />
     <ClCompile Include="src\main.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -164,9 +165,11 @@
     <ClInclude Include="src\audio\audiolayer.h" />
     <ClInclude Include="src\audio\portaudio\pa_layer.h" />
     <ClInclude Include="src\audio\ringbuffer.h" />
+    <ClInclude Include="src\common.h" />
     <ClInclude Include="src\fft\fft.h" />
     <ClInclude Include="src\fft\kiss_fft\kiss_fft.h" />
     <ClInclude Include="src\fft\kiss_fft\kiss_fft_guts.h" />
+    <ClInclude Include="src\filter.h" />
     <ClInclude Include="src\Log.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

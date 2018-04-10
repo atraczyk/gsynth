@@ -2,6 +2,7 @@
 #include <algorithm>
 
 #include "fft.h"
+#include "common.h"
 
 fft_wrapper::fft_wrapper()
 {
@@ -55,12 +56,15 @@ fft_wrapper::computeStft(bool useThreshold)
     double threshold = 0.001; // -60.0; -60dB
 
     for (uint32_t i = 0; i < magWindowSize; i++) {
+        amplitude = sqrt((out_[i].r * out_[i].r) + (out_[i].i * out_[i].i)) / static_cast<double>(magWindowSize);
+        // dB: 20 * log10(amplitude);
+
         if (useThreshold && (amplitude < threshold)) {
             continue;
         }
+        
         frequency = i * freqPerBin;
-        auto amplitude = sqrt((out_[i].r * out_[i].r) + (out_[i].i * out_[i].i)) / static_cast<double>(magWindowSize);
-        // dB: 20 * log10(amplitude);
+
         if (out_[i].i == 0.0) {
             phase = 0.0;
         }
@@ -70,6 +74,7 @@ fft_wrapper::computeStft(bool useThreshold)
         else {
             phase = atan2(out_[i].i, out_[i].r);
         }
+
         dataBlob.emplace_back(fftData{ frequency, amplitude, phase });
     }
 
