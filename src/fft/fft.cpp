@@ -74,7 +74,7 @@ fft_wrapper::computeStft(bool useThreshold)
     }
 
     // limit bands?
-    auto bandLimit = 0;
+    auto bandLimit = 32;
     if (bandLimit) {
         // sort by amplitude first
         std::sort(dataBlob.begin(), dataBlob.end(), [](fftData a, fftData b) {

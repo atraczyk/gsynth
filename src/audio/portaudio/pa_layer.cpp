@@ -218,14 +218,13 @@ PortAudioLayer::PortAudioLayerImpl::paOutputCallback(   PortAudioLayer& parentLa
 
             // re-synthesis: accumulate mono sample value as the sum sine waves based on currentFreqData
             double value = 0.0;
-            /*for (int i = 0; i < _fftDataBlob.size() && i < 128; i++) {
+            for (int i = 0; i < _fftDataBlob.size() && i < 32; i++) {
                 value += _fftDataBlob.at(i).amplitude *
                     sin(M_2PI * t * _fftDataBlob.at(i).frequency + _fftDataBlob.at(i).phase);
             }
-            value = value > 1.0 ? 1.0 : (value < -1.0 ? 1.0 : value);*/
-            value = currentFftInverse_.at(outFrame_ - startOutFrame);
-            value = value > 1.0 ? 1.0 : (value < -1.0 ? 1.0 : value);
+            //value = currentFftInverse_.at(outFrame_ - startOutFrame);
             //value = sin(M_2PI * t * 440.0);
+            value = value > 1.0 ? 1.0 : (value < -1.0 ? 1.0 : value);
             auto int16Data = static_cast<AudioSample>(value * 32768.0f);
             *out++ = int16Data;
             *out++ = int16Data;
