@@ -6,11 +6,9 @@ A real-time granular voice synthesizer designed for pitch shifting with visual s
 * inverse fft
 * sample based 
 
-### Installing
+## Installing
 
-## Dependencies
-
-# Linux
+### Linux
 
 Ubuntu 16.04
 
@@ -20,20 +18,20 @@ git clone https://atraczyk@bitbucket.org/atraczyk/gsynth.git && cd gsynth
 make
 ```
 
-# Windows
+### Windows
  
 * download Portaudio source: http://www.portaudio.com/download.html
 * download SDL2 binaries: https://www.libsdl.org/download-2.0.php
 * extract them to gsynth\
 * open gsynth.sln and build Debug/x64 configuration (should build portaudio.lib as a dependency)
 
-## Built With
+## Builds With
 
-# Linux
+### Linux
 
 Ubuntu 16.04 - gcc 7.2.0
 
-# Windows
+### Windows
 
 Visual Studio 2017
 
