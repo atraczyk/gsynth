@@ -14,7 +14,7 @@ Ubuntu 16.04
 
 ```
 sudo apt install portaudio19-dev libsdl2-dev
-git clone https://atraczyk@bitbucket.org/atraczyk/gsynth.git && cd gsynth
+git clone https://bitbucket.org/atraczyk/gsynth.git && cd gsynth
 make
 ```
 
