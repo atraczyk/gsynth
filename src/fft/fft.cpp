@@ -7,9 +7,9 @@ fft_wrapper::fft_wrapper()
 {
 }
 
-fft_wrapper::fft_wrapper(uint32_t sampleRate, uint32_t windowSize, bool isInverse)
+fft_wrapper::fft_wrapper(uint32_t sampleRate, uint32_t windowSize)
 {
-    init(sampleRate, windowSize, isInverse);
+    init(sampleRate, windowSize);
 }
 
 fft_wrapper::~fft_wrapper()
@@ -19,29 +19,30 @@ fft_wrapper::~fft_wrapper()
     }
 }
 
-void fft_wrapper::init(uint32_t sampleRate, uint32_t windowSize, bool isInverse)
+void fft_wrapper::init(uint32_t sampleRate, uint32_t windowSize)
 {
     sampleRate_ = sampleRate;
     windowSize_ = windowSize;
     in_.resize(windowSize_);
     out_.resize(windowSize_);
-    mag_.resize(windowSize_);
-    cfg_ = kiss_fft_alloc(windowSize_, isInverse, NULL, NULL);
+    inverse_.resize(windowSize_);
+    cfg_ = kiss_fft_alloc(windowSize_, false, NULL, NULL);
+    inverse_cfg_ = kiss_fft_alloc(windowSize_, true, NULL, NULL);
 }
 
 void
 fft_wrapper::setRealInput(const double * realData)
 {
-    for (int i = 0; i < windowSize_; i++) {
+    for (unsigned i = 0; i < windowSize_; i++) {
         in_[i].r = realData[i];
         in_[i].i = 0;
     }
 }
 
-std::vector<std::pair<double, double>>
-fft_wrapper::computeFrequencies(bool sort, bool useThreshold, int bandLimit)
+fftDataBlob
+fft_wrapper::computeStft(bool useThreshold)
 {
-    std::vector<std::pair<double, double>> freqs;
+    fftDataBlob dataBlob;
 
     kiss_fft(cfg_, &in_[0], &out_[0]);
 
@@ -49,40 +50,60 @@ fft_wrapper::computeFrequencies(bool sort, bool useThreshold, int bandLimit)
     std::vector<magInd> magInds;
 
     auto magWindowSize = windowSize_ / 2;
+    double freqPerBin = sampleRate_ / windowSize_;
+    double frequency, amplitude, phase;
+    double threshold = 0.001; // -60.0; -60dB
 
-    for (uint32_t i = 1; i < windowSize_ / 2; i++) {
-        mag_[i] = sqrt((out_[i].r * out_[i].r) + (out_[i].i * out_[i].i)) / static_cast<double>(magWindowSize);
-        magInds.emplace_back(std::make_pair(mag_[i], i));
-    }
-
-    // sort by magnitude?
-    if (sort) {
-        std::sort(magInds.begin(), magInds.end(), [](magInd a, magInd b) {
-            return a.first > b.first;
-        });
+    for (uint32_t i = 0; i < magWindowSize; i++) {
+        if (useThreshold && (amplitude < threshold)) {
+            continue;
+        }
+        frequency = i * freqPerBin;
+        auto amplitude = sqrt((out_[i].r * out_[i].r) + (out_[i].i * out_[i].i)) / static_cast<double>(magWindowSize);
+        // dB: 20 * log10(amplitude);
+        if (out_[i].i == 0.0) {
+            phase = 0.0;
+        }
+        else if (out_[i].r == 0.0) {
+            phase = out_[i].i > 0.0 ? M_PI_2 : -M_PI_2;
+        }
+        else {
+            phase = atan2(out_[i].i, out_[i].r);
+        }
+        dataBlob.emplace_back(fftData{ frequency, amplitude, phase });
     }
 
     // limit bands?
+    auto bandLimit = 0;
     if (bandLimit) {
-        magInds.resize(bandLimit);
+        // sort by amplitude first
+        std::sort(dataBlob.begin(), dataBlob.end(), [](fftData a, fftData b) {
+            return a.amplitude > b.amplitude;
+        });
+        dataBlob.resize(bandLimit);
     }
 
-    double threshold = 0.001; // -60.0; -60dB
-    auto applyThreshold = useThreshold && bandLimit;
-    for (const auto& mi : magInds) {
-        auto power = mi.first; // dB: 20 * log10(mi.first);
-        if (applyThreshold && (power < threshold)) {
-            continue;
-        }
-        auto weightedIndex = static_cast<double>(mi.second);
-        auto currIndex = mi.second;
-        if (currIndex - 1 >= 0)
-            weightedIndex = weightedIndex - (mag_[currIndex - 1] / mag_[currIndex]);
-        if (currIndex + 1 < magWindowSize)
-            weightedIndex = weightedIndex + (mag_[currIndex + 1] / mag_[currIndex]);
-        auto freq = static_cast<double>(weightedIndex) * sampleRate_ / windowSize_;
-        freqs.emplace_back(std::make_pair(freq, power));
-    }
+    /*auto shift = 20;
+    auto mid = out_.end() - out_.size() / 2;
+    auto rmid = out_.rend() - out_.size() / 2;
+    for (int i = 0; i < shift; i++) {
+        std::rotate(out_.begin(), out_.begin() + 1, mid);
+        std::rotate(out_.rbegin(), out_.rbegin() + 1, rmid);
+        *mid = { 0 ,0 };
+        *rmid = { 0 ,0 };
+    }*/
 
-    return freqs;
+    return dataBlob;
 }
+
+std::vector<double>
+fft_wrapper::computeInverseStft()
+{
+    std::vector<double> dataBlob;
+    kiss_fft(inverse_cfg_, &out_[0], &inverse_[0]);
+    for (const auto& bin : inverse_) {
+        dataBlob.emplace_back(bin.r / (2 * windowSize_));
+    }
+    return dataBlob;
+}
+

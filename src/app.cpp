@@ -68,8 +68,7 @@ bool App::initVideo()
 
 void App::render()
 {
-    auto frequencyData = paLayer.getFrequencyData();
-    //DBGOUT("FREQ.SIZE: %d", frequencyData.size());
+    auto _fftDataBlob = paLayer.getFftData();
 
     SDL_GL_MakeCurrent(window_, glContext_);
 
@@ -83,12 +82,12 @@ void App::render()
 
     bool linearPlot = false;
     double h;
-    auto barSize = 2.0f / frequencyData.size();
-    for (int i = 0; i < frequencyData.size(); i++) {
+    auto barSize = 2.0f / _fftDataBlob.size();
+    for (int i = 0; i < _fftDataBlob.size(); i++) {
         if (linearPlot) {
-            h = frequencyData.at(i).second * 2.0f;
+            h = _fftDataBlob.at(i).amplitude * 2.0f;
         } else {
-            auto dB = 20 * log10(frequencyData.at(i).second);
+            auto dB = 20 * log10(_fftDataBlob.at(i).amplitude);
             h = (1.0f - std::min(1.0, dB / -60.0f)) * 2.0f;
         }
         auto x = -1.0f + barSize + barSize * i;

@@ -16,7 +16,7 @@ public:
     virtual void startStream();
     virtual void stopStream();
 
-    freqData getFrequencyData();
+    fftDataBlob getFftData();
 
 private:
     PortAudioLayer(const PortAudioLayer&) = delete;

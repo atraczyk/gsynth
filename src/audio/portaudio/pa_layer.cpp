@@ -9,10 +9,6 @@
 #include <cmath>
 #include <vector>
 
-#ifndef M_PI
-#define M_PI 3.14159265
-#endif
-
 enum Direction {
     Input = 0,
     Output = 1,
@@ -44,8 +40,9 @@ struct PortAudioLayer::PortAudioLayerImpl
     std::mutex fftMutex_;
     std::condition_variable fftCv_;
 
-    freqData currentFreqData_;
-    std::mutex freqDataMutex_;
+    fftDataBlob currentFftData_;
+    std::vector<double> currentFftInverse_;
+    std::mutex fftDataMutex_;
 
     uint64_t outFrame_;
     uint64_t inFrame_;
@@ -121,13 +118,13 @@ PortAudioLayer::stopStream()
     }
 }
 
-freqData
-PortAudioLayer::getFrequencyData()
+fftDataBlob
+PortAudioLayer::getFftData()
 {
-    freqData ret;
+    fftDataBlob ret;
     {
-        std::lock_guard<std::mutex> lock(pimpl_->freqDataMutex_);
-        ret = pimpl_->currentFreqData_;
+        std::lock_guard<std::mutex> lock(pimpl_->fftDataMutex_);
+        ret = pimpl_->currentFftData_;
     }
     return ret;
 }
@@ -137,7 +134,7 @@ PortAudioLayer::PortAudioLayerImpl::PortAudioLayerImpl(PortAudioLayer& parent)
     , indexOut_(paNoDevice)
     , inputBuffer_(std::make_shared<RingBuffer>())
     , processedBuffer_(std::make_shared<RingBuffer>())
-    , fft_(parent.audioFormat_.sample_rate, parent.audioFormat_.sample_rate * 0.025, false)
+    , fft_(parent.audioFormat_.sample_rate, parent.audioFormat_.sample_rate * 0.025)
     , canPlay_(false)
     , outFrame_(0)
     , inFrame_(0)
@@ -212,19 +209,23 @@ PortAudioLayer::PortAudioLayerImpl::paOutputCallback(   PortAudioLayer& parentLa
     }
 
     if (readyBufSize >= framesPerBuffer && canPlay_) {
-        auto frequencyData = parentLayer.getFrequencyData();
+        auto _fftDataBlob = parentLayer.getFftData();
         auto elapsedTimePerFrame = 1.0 / static_cast<double>(parentLayer.audioFormat_.sample_rate);
         for (; outFrame_ < endOutFrame; outFrame_++) {
             auto t = (outFrame_)* elapsedTimePerFrame;
             AudioSample processed;
-            //processedBuffer_.get()->tryPop(&processed);
+            processedBuffer_.get()->tryPop(&processed);
 
             // re-synthesis: accumulate mono sample value as the sum sine waves based on currentFreqData
             double value = 0.0;
-            for (int i = 0; i < frequencyData.size() && i < 32; i++) {
-                value += frequencyData.at(i).second * sin(2 * M_PI * t * frequencyData.at(i).first);
+            /*for (int i = 0; i < _fftDataBlob.size() && i < 128; i++) {
+                value += _fftDataBlob.at(i).amplitude *
+                    sin(M_2PI * t * _fftDataBlob.at(i).frequency + _fftDataBlob.at(i).phase);
             }
-            value = sin(2 * M_PI * t * 440.0);
+            value = value > 1.0 ? 1.0 : (value < -1.0 ? 1.0 : value);*/
+            value = currentFftInverse_.at(outFrame_ - startOutFrame);
+            value = value > 1.0 ? 1.0 : (value < -1.0 ? 1.0 : value);
+            //value = sin(M_2PI * t * 440.0);
             auto int16Data = static_cast<AudioSample>(value * 32768.0f);
             *out++ = int16Data;
             *out++ = int16Data;
@@ -271,15 +272,15 @@ PortAudioLayer::PortAudioLayerImpl::paInputCallback(    PortAudioLayer& parentLa
 
     for (; inFrame_ < endInFrame; inFrame_++) {
         auto t = (inFrame_) * elapsedTimePerFrame;
-        //auto value = sin(2 * M_PI * t * freq);
-        auto value = 0.5 * sin(2 * M_PI * t * 354) + 0.5 * cos(2 * M_PI * t * 649);
+        auto value = sin(M_2PI * t * freq);
+        //auto value = 0.5 * sin(M_2PI * t * 354) + 0.5 * cos(M_2PI * t * 649);
         auto int16Data = static_cast<AudioSample>(value * gain * 32768.0f);
 
         // generate sine test
-        inputBuffer_.get()->tryPush(int16Data);
+        //inputBuffer_.get()->tryPush(int16Data);
 
         // mic test
-        //inputBuffer_.get()->tryPush(*in++);
+        inputBuffer_.get()->tryPush(*in++);
     }
     fftCv_.notify_all();
 
@@ -464,14 +465,14 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
             if (!inputBuffer_.get()->tryPop(&sample))
                 continue;
             processedBuffer_.get()->tryPush(sample);
-            auto hannWindowMult = 0.5 * (1.0 - cos(2.0 * M_PI * i / (fftWindowSize - 1.0)));
-            data.emplace_back(static_cast<double>(hannWindowMult * sample * 0.000030517578125f));
+            data.emplace_back(static_cast<double>(sample * 0.000030517578125f));
             ++i;
         }
         fft_.setRealInput(&data[0]);
         {
-            std::lock_guard<std::mutex> lk(freqDataMutex_);
-            currentFreqData_ = fft_.computeFrequencies(true, false, 32);
+            std::lock_guard<std::mutex> lk(fftDataMutex_);
+            currentFftData_ = fft_.computeStft();
+            currentFftInverse_ = fft_.computeInverseStft();
         }
     }
 }
