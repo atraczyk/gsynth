@@ -6,8 +6,8 @@ LowPassFilter::LowPassFilter(unsigned sampleRate, double Fc, double Q, double pe
 {
     z1_ = z2_ = 0.0;
     sampleRate_ = sampleRate;
-    Q_ = Q / sampleRate_;
-    Fc_ = Fc;
+    Fc_ = Fc / sampleRate_;
+    Q_ = Q;
     peakGain_ = peakGainDB;
     configureCoefficients();
 }
@@ -18,13 +18,13 @@ LowPassFilter::~LowPassFilter()
 
 void LowPassFilter::setQ(double Q)
 {
-    Q_ = Q / sampleRate_;
+    Q_ = Q;
     configureCoefficients();
 }
 
 void LowPassFilter::setFc(double Fc)
 {
-    Fc_ = Fc;
+    Fc_ = Fc / sampleRate_;
     configureCoefficients();
 }
 
