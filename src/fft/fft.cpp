@@ -56,8 +56,8 @@ fft_wrapper::computeStft(bool useThreshold)
     double threshold = 0.001; // -60.0; -60dB
 
     for (uint32_t i = 0; i < magWindowSize; i++) {
-        amplitude = sqrt((out_[i].r * out_[i].r) + (out_[i].i * out_[i].i)) / static_cast<double>(magWindowSize);
-        // dB: 20 * log10(amplitude);
+        amplitude = sqrt((out_[i].r * out_[i].r) + (out_[i].i * out_[i].i)) /
+            static_cast<double>(magWindowSize); // dB: 20 * log10(amplitude);
 
         if (useThreshold && (amplitude < threshold)) {
             continue;
@@ -78,25 +78,30 @@ fft_wrapper::computeStft(bool useThreshold)
         dataBlob.emplace_back(fftData{ frequency, amplitude, phase });
     }
 
-    // limit bands?
-    auto bandLimit = 32;
-    if (bandLimit) {
-        // sort by amplitude first
-        std::sort(dataBlob.begin(), dataBlob.end(), [](fftData a, fftData b) {
-            return a.amplitude > b.amplitude;
-        });
-        dataBlob.resize(bandLimit);
-    }
+    if (SYNTHTYPE == SynthType::resynth) {
+        // limit bands?
+        auto bandLimit = 32;
+        if (bandLimit) {
+            // sort by amplitude first
+            std::sort(dataBlob.begin(), dataBlob.end(), [](fftData a, fftData b) {
+                return a.amplitude > b.amplitude;
+            });
+            dataBlob.resize(bandLimit);
+        }
+    } 
+    
+    if (SYNTHTYPE == SynthType::ifft) {
+        auto mid = out_.end() - out_.size() / 2;
+        auto rmid = out_.rend() - out_.size() / 2;
 
-    /*auto shift = 20;
-    auto mid = out_.end() - out_.size() / 2;
-    auto rmid = out_.rend() - out_.size() / 2;
-    for (int i = 0; i < shift; i++) {
-        std::rotate(out_.begin(), out_.begin() + 1, mid);
-        std::rotate(out_.rbegin(), out_.rbegin() + 1, rmid);
-        *mid = { 0 ,0 };
-        *rmid = { 0 ,0 };
-    }*/
+        auto shift = 0;
+        std::rotate(out_.begin(), out_.begin() + shift, mid);
+        std::rotate(out_.rbegin(), out_.rbegin() + shift, rmid);
+        for (int i = 0; i < shift; i++) {
+            *(mid - i) = { 0 ,0 };
+            *(rmid - i) = { 0 ,0 };
+        }
+    }
 
     return dataBlob;
 }

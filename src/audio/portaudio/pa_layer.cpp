@@ -138,7 +138,7 @@ PortAudioLayer::PortAudioLayerImpl::PortAudioLayerImpl(PortAudioLayer& parent)
     , indexOut_(paNoDevice)
     , inputBuffer_(std::make_shared<RingBuffer>())
     , processedBuffer_(std::make_shared<RingBuffer>())
-    , fft_(parent.audioFormat_.sample_rate, parent.audioFormat_.sample_rate * 0.025)
+    , fft_(parent.audioFormat_.sample_rate, parent.audioFormat_.sample_rate * 0.05)
     , canPlay_(false)
     , outFrame_(0)
     , inFrame_(0)
@@ -221,13 +221,16 @@ PortAudioLayer::PortAudioLayerImpl::paOutputCallback(   PortAudioLayer& parentLa
             AudioSample processed;
             processedBuffer_.get()->tryPop(&processed);
 
-            // re-synthesis: accumulate mono sample value as the sum sine waves based on currentFreqData
             double value = 0.0;
-            for (int i = 0; i < _fftDataBlob.size() && i < 32; i++) {
-                value += _fftDataBlob.at(i).amplitude *
-                    sin(M_2PI * t * _fftDataBlob.at(i).frequency + _fftDataBlob.at(i).phase);
+            if (SYNTHTYPE == SynthType::resynth) {
+                for (int i = 0; i < _fftDataBlob.size() && i < 32; i++) {
+                    value += _fftDataBlob.at(i).amplitude *
+                        sin(M_2PI * t * _fftDataBlob.at(i).frequency + _fftDataBlob.at(i).phase);
+                }
             }
-            //value = currentFftInverse_.at(outFrame_ - startOutFrame);
+            if (SYNTHTYPE == SynthType::ifft) {
+                value = currentFftInverse_.at(outFrame_ - startOutFrame);
+            }
             //value = sin(M_2PI * t * 440.0);
             value = value > 1.0 ? 1.0 : (value < -1.0 ? 1.0 : value);
             auto int16Data = static_cast<AudioSample>(value * 32768.0f);
@@ -281,10 +284,10 @@ PortAudioLayer::PortAudioLayerImpl::paInputCallback(    PortAudioLayer& parentLa
         auto int16Data = static_cast<AudioSample>(value * gain * 32768.0f);
 
         // generate sine test
-        //inputBuffer_.get()->tryPush(int16Data);
+        inputBuffer_.get()->tryPush(int16Data);
 
         // mic test
-        inputBuffer_.get()->tryPush(*in++);
+        //inputBuffer_.get()->tryPush(*in++);
     }
     fftCv_.notify_all();
 
@@ -471,14 +474,22 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
                 continue;
             processedBuffer_.get()->tryPush(sample);
             value = lpFilter.processSample(sample * 0.000030517578125f);
-            data.emplace_back(static_cast<double>(value));
+            double windowMult;
+            if (SYNTHTYPE == SynthType::resynth) {
+                windowMult = 0.5 * (1.0 - cos(2.0 * M_PI * i / (fftWindowSize - 1.0)));
+            } else {
+                windowMult = 0.5 * (1.0 - cos(2.0 * M_PI * i / (fftWindowSize - 1.0)));
+            }
+            data.emplace_back(static_cast<double>(windowMult * value));
             ++i;
         }
         fft_.setRealInput(&data[0]);
         {
             std::lock_guard<std::mutex> lk(fftDataMutex_);
             currentFftData_ = fft_.computeStft();
-            currentFftInverse_ = fft_.computeInverseStft();
+            if (SYNTHTYPE == SynthType::ifft) {
+                currentFftInverse_ = fft_.computeInverseStft();
+            }
         }
     }
 }

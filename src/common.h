@@ -11,3 +11,11 @@
 #ifndef M_2PI
 #define M_2PI   6.28318530717958647692528676655900576
 #endif
+
+enum SynthType {
+    resynth = 0,
+    ifft = 1,
+    sample = 2
+};
+
+#define SYNTHTYPE SynthType::ifft
