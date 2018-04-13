@@ -3,7 +3,6 @@
 #include <cmath>
 
 #include "app.h"
-#include "pa_layer.h"
 #include "Log.hpp"
 
 #ifdef _WIN32

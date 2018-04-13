@@ -80,7 +80,7 @@ fft_wrapper::computeStft(bool useThreshold)
 
     if (SYNTHTYPE == SynthType::resynth) {
         // limit bands?
-        auto bandLimit = 32;
+        auto bandLimit = 64;
         if (bandLimit) {
             // sort by amplitude first
             std::sort(dataBlob.begin(), dataBlob.end(), [](fftData a, fftData b) {
@@ -89,12 +89,18 @@ fft_wrapper::computeStft(bool useThreshold)
             dataBlob.resize(bandLimit);
         }
     } 
-    
-    if (SYNTHTYPE == SynthType::ifft) {
+
+    return dataBlob;
+}
+
+std::vector<double>
+fft_wrapper::computeInverseStft(double pitchShift)
+{
+    auto shift = static_cast<int>(fabs(pitchShift / 10));
+    if (shift && shift < 20) {
         auto mid = out_.end() - out_.size() / 2;
         auto rmid = out_.rend() - out_.size() / 2;
 
-        auto shift = 0;
         std::rotate(out_.begin(), out_.begin() + shift, mid);
         std::rotate(out_.rbegin(), out_.rbegin() + shift, rmid);
         for (int i = 0; i < shift; i++) {
@@ -103,12 +109,6 @@ fft_wrapper::computeStft(bool useThreshold)
         }
     }
 
-    return dataBlob;
-}
-
-std::vector<double>
-fft_wrapper::computeInverseStft()
-{
     std::vector<double> dataBlob;
     kiss_fft(inverse_cfg_, &out_[0], &inverse_[0]);
     for (const auto& bin : inverse_) {

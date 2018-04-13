@@ -11,6 +11,8 @@
 #include <cmath>
 #include <vector>
 
+#include <ncurses.h>
+
 enum Direction {
     Input = 0,
     Output = 1,
@@ -50,6 +52,8 @@ struct PortAudioLayer::PortAudioLayerImpl
 
     uint64_t outFrame_;
     uint64_t inFrame_;
+    
+    double pitchShift_ = 0;
 
     std::array<PaStream*, static_cast<int>(Direction::End)> streams_;
 
@@ -131,6 +135,12 @@ PortAudioLayer::getFftData()
         ret = pimpl_->currentFftData_;
     }
     return ret;
+}
+
+void 
+PortAudioLayer::setPitchShift(double pitchShift)
+{
+    pimpl_->pitchShift_ = pitchShift;
 }
 
 PortAudioLayer::PortAudioLayerImpl::PortAudioLayerImpl(PortAudioLayer& parent)
@@ -223,15 +233,15 @@ PortAudioLayer::PortAudioLayerImpl::paOutputCallback(   PortAudioLayer& parentLa
 
             double value = 0.0;
             if (SYNTHTYPE == SynthType::resynth) {
+                auto fMult = (1.0 + pitchShift_ / 200);
                 for (int i = 0; i < _fftDataBlob.size() && i < 32; i++) {
                     value += _fftDataBlob.at(i).amplitude *
-                        sin(M_2PI * t * _fftDataBlob.at(i).frequency + _fftDataBlob.at(i).phase);
+                        sin(M_2PI * t * _fftDataBlob.at(i).frequency * fMult + _fftDataBlob.at(i).phase);
                 }
             }
             if (SYNTHTYPE == SynthType::ifft) {
                 value = currentFftInverse_.at(outFrame_ - startOutFrame);
             }
-            //value = sin(M_2PI * t * 440.0);
             value = value > 1.0 ? 1.0 : (value < -1.0 ? 1.0 : value);
             auto int16Data = static_cast<AudioSample>(value * 32768.0f);
             *out++ = int16Data;
@@ -272,8 +282,8 @@ PortAudioLayer::PortAudioLayerImpl::paInputCallback(    PortAudioLayer& parentLa
     auto endInFrame = inFrame_ + framesPerBuffer;
     AudioSample *in = (AudioSample*)inputBuffer;
 
-    static double gain = 1.0f;
-    static double freq = 440.0f;
+    double gain = 1.0f;
+    double freq = 440.0f + pitchShift_;
     auto elapsedTimePerFrame = 1.0 / static_cast<double>(parentLayer.audioFormat_.sample_rate);
     auto periodFrames = static_cast<int>((1.0 / freq) / elapsedTimePerFrame);
 
@@ -284,10 +294,10 @@ PortAudioLayer::PortAudioLayerImpl::paInputCallback(    PortAudioLayer& parentLa
         auto int16Data = static_cast<AudioSample>(value * gain * 32768.0f);
 
         // generate sine test
-        inputBuffer_.get()->tryPush(int16Data);
+        //inputBuffer_.get()->tryPush(int16Data);
 
         // mic test
-        //inputBuffer_.get()->tryPush(*in++);
+        inputBuffer_.get()->tryPush(*in++);
     }
     fftCv_.notify_all();
 
@@ -382,8 +392,6 @@ openStreamDevice(PortAudioLayer& parent, PaStream** stream,
 void
 PortAudioLayer::PortAudioLayerImpl::initStream(PortAudioLayer& parent)
 {
-    //parent.dcblocker_.reset();
-
     DBGOUT("Open PortAudio Output Stream");
     if (indexOut_ != paNoDevice) {
         parent.audioFormat_ =  openStreamDevice(
@@ -475,11 +483,7 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
             processedBuffer_.get()->tryPush(sample);
             value = lpFilter.processSample(sample * 0.000030517578125f);
             double windowMult;
-            if (SYNTHTYPE == SynthType::resynth) {
-                windowMult = 0.5 * (1.0 - cos(2.0 * M_PI * i / (fftWindowSize - 1.0)));
-            } else {
-                windowMult = 0.5 * (1.0 - cos(2.0 * M_PI * i / (fftWindowSize - 1.0)));
-            }
+            windowMult = 1.0;//0.5 * (1.0 - cos(2.0 * M_PI * i / (fftWindowSize - 1.0)));
             data.emplace_back(static_cast<double>(windowMult * value));
             ++i;
         }
@@ -488,7 +492,7 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
             std::lock_guard<std::mutex> lk(fftDataMutex_);
             currentFftData_ = fft_.computeStft();
             if (SYNTHTYPE == SynthType::ifft) {
-                currentFftInverse_ = fft_.computeInverseStft();
+                currentFftInverse_ = fft_.computeInverseStft(pitchShift_);
             }
         }
     }

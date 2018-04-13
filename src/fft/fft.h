@@ -22,7 +22,7 @@ public:
     void init(uint32_t sampleRate, uint32_t windowSize);
     void setRealInput(const double * realData);
     fftDataBlob computeStft(bool useThreshold = false);
-    std::vector<double> computeInverseStft();
+    std::vector<double> computeInverseStft(double pitchShift);
 
     uint32_t getWindowSize() {
         return windowSize_;

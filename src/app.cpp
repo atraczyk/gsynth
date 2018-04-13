@@ -4,30 +4,7 @@
 #ifdef _WIN32
 #include <conio.h>
 #else
-#include <unistd.h>
-#include <termios.h>
-char getch()
-{
-    char buf=0;
-    struct termios old={0};
-    fflush(stdout);
-    if(tcgetattr(0, &old)<0)
-        perror("tcsetattr()");
-    old.c_lflag&=~ICANON;
-    old.c_lflag&=~ECHO;
-    old.c_cc[VMIN]=1;
-    old.c_cc[VTIME]=0;
-    if(tcsetattr(0, TCSANOW, &old)<0)
-        perror("tcsetattr ICANON");
-    if(read(0,&buf,1)<0)
-        perror("read()");
-    old.c_lflag|=ICANON;
-    old.c_lflag|=ECHO;
-    if(tcsetattr(0, TCSADRAIN, &old)<0)
-        perror ("tcsetattr ~ICANON");
-    printf("%c\n",buf);
-    return buf;
- }
+#include <ncurses.h>
 #endif
 
 App::App()
@@ -135,13 +112,38 @@ void App::execute(int argc, char* argv[])
     }
 
     SDL_Event event;
+    
+    float pitchShift = 0.0;
 
     while (running_) {
         while (SDL_PollEvent(&event) != 0) {
             onEvent(&event);
 
-            if (event.type == SDL_QUIT) {
-                running_ = false;
+            switch( event.type ) {
+                case SDL_QUIT:
+                    running_ = false;
+                    break;
+                case SDL_KEYDOWN:
+                case SDL_KEYUP:
+                    switch( event.key.keysym.sym ){
+                        case SDLK_ESCAPE:
+                            running_ = false;
+                            break;
+                        case SDLK_UP:
+                            pitchShift += 1;
+                            std::cout << "pitchShift " << pitchShift << "\n";
+                            paLayer.setPitchShift(pitchShift);
+                            break;
+                        case SDLK_DOWN:
+                            pitchShift -= 1;
+                            std::cout << "pitchShift " << pitchShift << "\n";
+                            paLayer.setPitchShift(pitchShift);
+                            break;
+                        default:
+                            break;
+                    }
+                default:
+                    break;
             }
         }
 

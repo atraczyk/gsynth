@@ -17,6 +17,8 @@ public:
     virtual void stopStream();
 
     fftDataBlob getFftData();
+    
+    void setPitchShift(double pitchShift);
 
 private:
     PortAudioLayer(const PortAudioLayer&) = delete;

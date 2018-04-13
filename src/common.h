@@ -18,4 +18,4 @@ enum SynthType {
     sample = 2
 };
 
-#define SYNTHTYPE SynthType::ifft
+#define SYNTHTYPE SynthType::resynth
