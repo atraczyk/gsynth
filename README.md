@@ -17,16 +17,17 @@ git clone https://bitbucket.org/atraczyk/gsynth.git
 
 ### Linux
 
-Debian/Ubuntu
+Debian/Ubuntu deps
 ```
 sudo apt install portaudio19-dev libsdl2-dev libncurses-dev
 ```
 
-Fedora
+Fedora deps
 ```
 sudo dnf install portaudio-devel SDL2-devel ncurses-devel
 ```
 
+then
 ```
 make
 ```
