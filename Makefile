@@ -2,12 +2,13 @@ IDIRS=-I../src -Isrc -Isrc/audio -Isrc/audio/portaudio -Isrc/fft -Isrc/fft/kiss_
 CC=g++
 CFLAGS=-I$(IDIRS)
 
-LIBS=-lSDL2main -lSDL2 -lm -lpthread -lportaudio -lGL
+LIBS=-lSDL2 -lm -lpthread -lportaudio -lGL
 
 gsynth:
 	$(CC) -o gsynth \
 	src/main.cpp \
 	src/app.cpp \
+	src/filter.cpp \
 	src/audio/ringbuffer.cpp \
 	src/audio/audiolayer.cpp \
 	src/audio/portaudio/pa_layer.cpp \
