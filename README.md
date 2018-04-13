@@ -1,11 +1,13 @@
 # GSYNTH (WIP)
 
-A real-time granula synthesizer / phase vocoder designed for pitch shifting, with spectral output.
+A real-time granular synthesizer / phase vocoder designed for pitch shifting.
 Will support three re-synthesis modes:
 
 * sinusoidal additive (computationally expensive / simple processing)
 * inverse fft (fast / difficult processing)
 * sample based reconstruction
+
+Also outputs frequency spectrum to SDL2 surface.
 
 ## Building
 
@@ -49,8 +51,8 @@ Windows 10 1709 (16299.371) Visual Studio 2017
 
 ## TODO
 
-* export wav files for debug
+* export wav files and use gtkglext ui for debug
 * implement phase incoherence adjustment
 * use grains shorter than the frame buffer
-* overlap and crossfade delayed grains
+* overlap and add (crossfade) delayed grains
 * sample based reconstruction (linear/cubic interpolation)
