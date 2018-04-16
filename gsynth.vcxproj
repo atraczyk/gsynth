@@ -155,6 +155,7 @@
     <ClCompile Include="src\audio\audiolayer.cpp" />
     <ClCompile Include="src\audio\portaudio\pa_layer.cpp" />
     <ClCompile Include="src\audio\ringbuffer.cpp" />
+    <ClCompile Include="src\audio\soundfile.cpp" />
     <ClCompile Include="src\fft\fft.cpp" />
     <ClCompile Include="src\fft\kiss_fft\kiss_fft.c" />
     <ClCompile Include="src\filter.cpp" />
@@ -165,6 +166,7 @@
     <ClInclude Include="src\audio\audiolayer.h" />
     <ClInclude Include="src\audio\portaudio\pa_layer.h" />
     <ClInclude Include="src\audio\ringbuffer.h" />
+    <ClInclude Include="src\audio\soundfile.h" />
     <ClInclude Include="src\common.h" />
     <ClInclude Include="src\fft\fft.h" />
     <ClInclude Include="src\fft\kiss_fft\kiss_fft.h" />

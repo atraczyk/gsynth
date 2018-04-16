@@ -3,6 +3,8 @@
 #include <cmath>
 
 #include "app.h"
+#include "pa_layer.h"
+#include "soundfile.h"
 #include "Log.hpp"
 
 #ifdef _WIN32
@@ -19,6 +21,12 @@ int main(int argc, char* argv[])
 
     App app(512, 512);
     app.execute(argc, argv);
+
+    uint16_t numChannels;
+    uint32_t sampleRate;
+    uint16_t numBytes;
+    std::vector<float> source, out;
+    ReadWaveFile("legend1.wav", source, numChannels, sampleRate, numBytes);
 
     //system("pause");
 

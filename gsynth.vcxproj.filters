@@ -43,6 +43,9 @@
     <ClCompile Include="src\filter.cpp">
       <Filter>Source Files\audio</Filter>
     </ClCompile>
+    <ClCompile Include="src\audio\soundfile.cpp">
+      <Filter>Source Files\audio</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Log.hpp">
@@ -74,6 +77,9 @@
     </ClInclude>
     <ClInclude Include="src\common.h">
       <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\audio\soundfile.h">
+      <Filter>Source Files\audio</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
