@@ -25,9 +25,6 @@
     <ClCompile Include="src\audio\audiolayer.cpp">
       <Filter>Source Files\audio</Filter>
     </ClCompile>
-    <ClCompile Include="src\audio\ringbuffer.cpp">
-      <Filter>Source Files\audio</Filter>
-    </ClCompile>
     <ClCompile Include="src\audio\portaudio\pa_layer.cpp">
       <Filter>Source Files\audio\portaudio</Filter>
     </ClCompile>
@@ -54,9 +51,6 @@
     <ClInclude Include="src\audio\audiolayer.h">
       <Filter>Source Files\audio</Filter>
     </ClInclude>
-    <ClInclude Include="src\audio\ringbuffer.h">
-      <Filter>Source Files\audio</Filter>
-    </ClInclude>
     <ClInclude Include="src\audio\portaudio\pa_layer.h">
       <Filter>Source Files\audio\portaudio</Filter>
     </ClInclude>
@@ -79,6 +73,9 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="src\audio\soundfile.h">
+      <Filter>Source Files\audio</Filter>
+    </ClInclude>
+    <ClInclude Include="src\audio\ringbuffer.h">
       <Filter>Source Files\audio</Filter>
     </ClInclude>
   </ItemGroup>

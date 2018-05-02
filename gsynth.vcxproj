@@ -154,7 +154,6 @@
     <ClCompile Include="src\app.cpp" />
     <ClCompile Include="src\audio\audiolayer.cpp" />
     <ClCompile Include="src\audio\portaudio\pa_layer.cpp" />
-    <ClCompile Include="src\audio\ringbuffer.cpp" />
     <ClCompile Include="src\audio\soundfile.cpp" />
     <ClCompile Include="src\fft\fft.cpp" />
     <ClCompile Include="src\fft\kiss_fft\kiss_fft.c" />

@@ -38,6 +38,6 @@ inline void FloatToPCM(unsigned char *PCM, const float& in, size_t numBytes);
 inline void PCMToFloat(float& out, const unsigned char *PCM, size_t numBytes);
 bool WriteWaveFile(const char *fileName, std::vector<float>& dataFloat, uint16_t numChannels, uint32_t sampleRate, uint16_t numBytes);
 bool ReadFileIntoMemory(const char *fileName, std::vector<unsigned char>& data);
-bool ReadWaveFile(const char *fileName, std::vector<float>& data, uint16_t& numChannels, uint32_t& sampleRate, uint16_t& numBytes);
+uint64_t ReadWaveFile(const char *fileName, std::vector<float>& data, uint16_t& numChannels, uint32_t& sampleRate, uint16_t& numBytes);
 static float CubicHermite(float A, float B, float C, float D, float t);
 inline float SampleChannelFractional(const std::vector<float>& input, float sampleFloat, uint16_t channel, uint16_t numChannels);

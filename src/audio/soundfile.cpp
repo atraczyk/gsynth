@@ -6,12 +6,12 @@
 #include <stdlib.h>
 
 #include "soundfile.h"
+#include "Log.hpp"
 
 inline void FloatToPCM(unsigned char *PCM, const float& in, size_t numBytes)
 {
     // 8 bit is unsigned
-    if (numBytes == 1)
-    {
+    if (numBytes == 1) {
         PCM[0] = unsigned char((in * 0.5f + 0.5f) * 255.0f);
         return;
     }
@@ -24,8 +24,7 @@ inline void FloatToPCM(unsigned char *PCM, const float& in, size_t numBytes)
     else
         data = uint32_t(double(in) * double(0x7fffffff));
 
-    switch (numBytes)
-    {
+    switch (numBytes) {
     case 4: PCM[3] = ((data >> 24) & 0xFF); PCM[2] = ((data >> 16) & 0xFF); PCM[1] = ((data >> 8) & 0xFF); PCM[0] = (data & 0xFF); break;
     case 3: PCM[2] = ((data >> 24) & 0xFF); PCM[1] = ((data >> 16) & 0xFF); PCM[0] = ((data >> 8) & 0xFF); break;
     case 2: PCM[1] = ((data >> 24) & 0xFF); PCM[0] = ((data >> 16) & 0xFF); break;
@@ -35,15 +34,13 @@ inline void FloatToPCM(unsigned char *PCM, const float& in, size_t numBytes)
 inline void PCMToFloat(float& out, const unsigned char *PCM, size_t numBytes)
 {
     // 8 bit is unsigned
-    if (numBytes == 1)
-    {
+    if (numBytes == 1) {
         out = (float(PCM[0]) / float(255.0f)) * 2.0f - 1.0f;
         return;
     }
 
     uint32_t data = 0;
-    switch (numBytes)
-    {
+    switch (numBytes) {
     case 4: data = (uint32_t(PCM[3]) << 24) | (uint32_t(PCM[2]) << 16) | (uint32_t(PCM[1]) << 8) | uint32_t(PCM[0]); break;
     case 3: data = (uint32_t(PCM[2]) << 24) | (uint32_t(PCM[1]) << 16) | (uint32_t(PCM[0]) << 8); break;
     case 2: data = (uint32_t(PCM[1]) << 24) | (uint32_t(PCM[0]) << 16); break;
@@ -61,6 +58,9 @@ inline void PCMToFloat(float& out, const unsigned char *PCM, size_t numBytes)
 // Coresponding to 8 bit, 16 bit, 24 bit, and 32 bit audio.
 bool WriteWaveFile(const char *fileName, std::vector<float>& dataFloat, uint16_t numChannels, uint32_t sampleRate, uint16_t numBytes)
 {
+    if (dataFloat.size() == 0) {
+        return false;
+    }
     std::vector<unsigned char> data;
     data.resize(dataFloat.size() * numBytes);
     for (size_t i = 0; i < dataFloat.size(); ++i)
@@ -72,9 +72,8 @@ bool WriteWaveFile(const char *fileName, std::vector<float>& dataFloat, uint16_t
     //open the file if we can
     FILE *File = nullptr;
     fopen_s(&File, fileName, "w+b");
-    if (!File)
-    {
-        printf("[-----ERROR-----] Could not open %s for writing.\n", fileName);
+    if (!File) {
+        DBGOUT("[-----ERROR-----] Could not open %s for writing.", fileName);
         return false;
     }
 
@@ -107,7 +106,7 @@ bool WriteWaveFile(const char *fileName, std::vector<float>& dataFloat, uint16_t
 
     //close the file and return success
     fclose(File);
-    printf("%s saved.\n", fileName);
+    DBGOUT("%s saved.", fileName);
     return true;
 }
 
@@ -116,9 +115,8 @@ bool ReadFileIntoMemory(const char *fileName, std::vector<unsigned char>& data)
     //open the file if we can
     FILE *file = nullptr;
     fopen_s(&file, fileName, "rb");
-    if (!file)
-    {
-        printf("[-----ERROR-----]Could not open %s for reading.\n", fileName);
+    if (!file) {
+        DBGOUT("[-----ERROR-----]Could not open %s for reading.", fileName);
         return false;
     }
 
@@ -135,49 +133,44 @@ bool ReadFileIntoMemory(const char *fileName, std::vector<unsigned char>& data)
     return true;
 }
 
-bool ReadWaveFile(const char *fileName, std::vector<float>& data, uint16_t& numChannels, uint32_t& sampleRate, uint16_t& numBytes)
+uint64_t ReadWaveFile(const char *fileName, std::vector<float>& data, uint16_t& numChannels, uint32_t& sampleRate, uint16_t& numBytes)
 {
     // read the whole file into memory if we can
     std::vector<unsigned char> fileData;
     if (!ReadFileIntoMemory(fileName, fileData))
-        return false;
+        return 0;
     size_t fileIndex = 0;
 
     //make sure the main chunk ID is "RIFF"
-    if ((fileData.size() < fileIndex + 4) || memcmp(&fileData[fileIndex], "RIFF", 4))
-    {
-        printf("[-----ERROR-----]%s is an invalid input file. (1)\n", fileName);
-        return false;
+    if ((fileData.size() < fileIndex + 4) || memcmp(&fileData[fileIndex], "RIFF", 4)) {
+        DBGOUT("[-----ERROR-----]%s is an invalid input file. (1)", fileName);
+        return 0;
     }
     fileIndex += 4;
 
     //get the main chunk size
     uint32_t chunkSize;
-    if (fileData.size() < fileIndex + 4)
-    {
-        printf("[-----ERROR-----]%s is an invalid input file. (2)\n", fileName);
-        return false;
+    if (fileData.size() < fileIndex + 4) {
+        DBGOUT("[-----ERROR-----]%s is an invalid input file. (2)", fileName);
+        return 0;
     }
     chunkSize = *(uint32_t*)&fileData[fileIndex];
     fileIndex += 4;
 
     //make sure the format is "WAVE"
-    if ((fileData.size() < fileIndex + 4) || memcmp(&fileData[fileIndex], "WAVE", 4))
-    {
-        printf("[-----ERROR-----]%s is an invalid input file. (3)\n", fileName);
-        return false;
+    if ((fileData.size() < fileIndex + 4) || memcmp(&fileData[fileIndex], "WAVE", 4)) {
+        DBGOUT("[-----ERROR-----]%s is an invalid input file. (3)", fileName);
+        return 0;
     }
     fileIndex += 4;
 
     size_t chunkPosFmt = -1;
     size_t chunkPosData = -1;
-    while (chunkPosFmt == -1 || chunkPosData == -1)
-    {
+    while (chunkPosFmt == -1 || chunkPosData == -1) {
         // get a chunk id and chunk size if we can
-        if (fileData.size() < fileIndex + 8)
-        {
-            printf("[-----ERROR-----]%s is an invalid input file. (4)\n", fileName);
-            return false;
+        if (fileData.size() < fileIndex + 8) {
+            DBGOUT("[-----ERROR-----]%s is an invalid input file. (4)", fileName);
+            return 0;
         }
 
         // get the chunk id if we can
@@ -187,13 +180,11 @@ bool ReadWaveFile(const char *fileName, std::vector<float>& data, uint16_t& numC
         fileIndex += 4;
 
         //if we hit a fmt
-        if (!memcmp(chunkID, "fmt ", 4))
-        {
+        if (!memcmp(chunkID, "fmt ", 4)) {
             chunkPosFmt = (long)(fileIndex - 8);
         }
         //else if we hit a data
-        else if (!memcmp(chunkID, "data", 4))
-        {
+        else if (!memcmp(chunkID, "data", 4)) {
             chunkPosData = (long)(fileIndex - 8);
         }
 
@@ -206,34 +197,31 @@ bool ReadWaveFile(const char *fileName, std::vector<float>& data, uint16_t& numC
 
     //load the fmt part if we can
     fileIndex = chunkPosFmt;
-    if (fileData.size() < fileIndex + 24)
-    {
-        printf("[-----ERROR-----]%s is an invalid input file. (5)\n", fileName);
-        return false;
+    if (fileData.size() < fileIndex + 24) {
+        DBGOUT("[-----ERROR-----]%s is an invalid input file. (5)", fileName);
+        return 0;
     }
     memcpy(&waveData.m_subChunk1ID, &fileData[fileIndex], 24);
     fileIndex += 24;
 
     //load the data part if we can
     fileIndex = chunkPosData;
-    if (fileData.size() < fileIndex + 8)
-    {
-        printf("[-----ERROR-----]%s is an invalid input file. (6)\n", fileName);
-        return false;
+    if (fileData.size() < fileIndex + 8) {
+        DBGOUT("[-----ERROR-----]%s is an invalid input file. (6)", fileName);
+        return 0;
     }
     memcpy(&waveData.m_subChunk2ID, &fileData[fileIndex], 8);
     fileIndex += 8;
 
     //verify a couple things about the file data
-    if (waveData.m_audioFormat != 1 ||       //only pcm data
-        waveData.m_numChannels < 1 ||        //must have a channel
-        waveData.m_numChannels > 2 ||        //must not have more than 2
-        waveData.m_bitsPerSample > 32 ||     //32 bits per sample max
-        waveData.m_bitsPerSample % 8 != 0 || //must be a multiple of 8 bites
-        waveData.m_blockAlign > 8)           //blocks must be 8 bytes or lower
-    {
-        printf("[-----ERROR-----]%s is an invalid input file. (7)\n", fileName);
-        return false;
+    if (waveData.m_audioFormat != 1 ||
+        waveData.m_numChannels < 1 ||
+        waveData.m_numChannels > 2 ||
+        waveData.m_bitsPerSample > 32 ||
+        waveData.m_bitsPerSample % 8 != 0 ||
+        waveData.m_blockAlign > 8) {
+        DBGOUT("[-----ERROR-----]%s is an invalid input file. (7)", fileName);
+        return 0;
     }
 
     //figure out how many samples and blocks there are total in the source data
@@ -244,14 +232,12 @@ bool ReadWaveFile(const char *fileName, std::vector<float>& data, uint16_t& numC
     data.resize(numSourceSamples);
 
     //read in the source samples at whatever sample rate / number of channels it might be in
-    if (fileData.size() < fileIndex + numSourceSamples * bytesPerSample)
-    {
-        printf("[-----ERROR-----]%s is an invalid input file. (8)\n", fileName);
-        return false;
+    if (fileData.size() < fileIndex + numSourceSamples * bytesPerSample) {
+        DBGOUT("[-----ERROR-----]%s is an invalid input file. (8)", fileName);
+        return 0;
     }
 
-    for (size_t nIndex = 0; nIndex < numSourceSamples; ++nIndex)
-    {
+    for (size_t nIndex = 0; nIndex < numSourceSamples; ++nIndex) {
         PCMToFloat(data[nIndex], &fileData[fileIndex], bytesPerSample);
         fileIndex += bytesPerSample;
     }
@@ -261,13 +247,11 @@ bool ReadWaveFile(const char *fileName, std::vector<float>& data, uint16_t& numC
     sampleRate = waveData.m_sampleRate;
     numBytes = waveData.m_bitsPerSample / 8;
 
-    printf("%s loaded.\n", fileName);
-    return true;
+    DBGOUT("%s loaded - channels: %d, sampleRate: %d, bytesPerSample: %d, numBytes: %d",
+        fileName, numChannels, sampleRate, bytesPerSample, numBytes);
+    return numSourceSamples;
 }
 
-// Cubic hermite interpolation. More information available here: https://blog.demofox.org/2015/08/08/cubic-hermite-interpolation/
-// t is a value that goes from 0 to 1 to interpolate in a C1 continuous way across uniformly sampled data points.
-// when t is 0, this will return B.  When t is 1, this will return C.
 static float CubicHermite(float A, float B, float C, float D, float t)
 {
     float a = -A / 2.0f + (3.0f*B) / 2.0f - (3.0f*C) / 2.0f + D / 2.0f;
@@ -280,11 +264,6 @@ static float CubicHermite(float A, float B, float C, float D, float t)
 
 inline float SampleChannelFractional(const std::vector<float>& input, float sampleFloat, uint16_t channel, uint16_t numChannels)
 {
-    // change this to #if 0 to use linear interpolation instead, which is faster but lower quality
-#if 1
-
-    // This uses cubic hermite interpolation to get values between samples
-
     size_t sample = size_t(sampleFloat);
     float sampleFraction = sampleFloat - std::floorf(sampleFloat);
 
@@ -303,17 +282,10 @@ inline float SampleChannelFractional(const std::vector<float>& input, float samp
     sampleIndex1 = std::min(sampleIndex1, input.size() - 1);
     sampleIndex2 = std::min(sampleIndex2, input.size() - 1);
 
-    return CubicHermite(input[sampleIndexNeg1], input[sampleIndex0], input[sampleIndex1], input[sampleIndex2], sampleFraction);
-#else
-    // This uses linear interpolation to get values between samples.
-    size_t sample = size_t(sampleFloat);
-    float sampleFraction = sampleFloat - std::floorf(sampleFloat);
-    size_t sample1Index = sample * numChannels + channel;
-    sample1Index = std::min(sample1Index, input.size() - 1);
-    float value1 = input[sample1Index];
-    size_t sample2Index = (sample + 1) * numChannels + channel;
-    sample2Index = std::min(sample2Index, input.size() - 1);
-    float value2 = input[sample1Index];
-    return value1 * (1.0f - sampleFraction) + value2 * sampleFraction;
-#endif
+    return CubicHermite(
+        input[sampleIndexNeg1],
+        input[sampleIndex0],
+        input[sampleIndex1],
+        input[sampleIndex2],
+        sampleFraction);
 }

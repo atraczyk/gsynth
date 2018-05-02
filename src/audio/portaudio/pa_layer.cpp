@@ -3,6 +3,7 @@
 #include "ringbuffer.h"
 #include "Log.hpp"
 #include "filter.h"
+#include "soundfile.h"
 #include "common.h"
 
 #include <portaudio.h>
@@ -11,7 +12,9 @@
 #include <cmath>
 #include <vector>
 
+#ifndef _WIN32
 #include <ncurses.h>
+#endif // !_WIN32
 
 enum Direction {
     Input = 0,
@@ -55,6 +58,8 @@ struct PortAudioLayer::PortAudioLayerImpl
     
     double pitchShift_ = 0;
 
+    std::vector<float> out_;
+
     std::array<PaStream*, static_cast<int>(Direction::End)> streams_;
 
     void processFFT();
@@ -88,6 +93,7 @@ PortAudioLayer::PortAudioLayer(AudioFormat out_format, AudioFormat in_format)
 
 PortAudioLayer::~PortAudioLayer()
 {
+    WriteWaveFile("out.wav", pimpl_->out_, 1, audioFormat_.sample_rate, 2);
 }
 
 void
@@ -229,23 +235,29 @@ PortAudioLayer::PortAudioLayerImpl::paOutputCallback(   PortAudioLayer& parentLa
         for (; outFrame_ < endOutFrame; outFrame_++) {
             auto t = (outFrame_)* elapsedTimePerFrame;
             AudioSample processed;
-            processedBuffer_.get()->tryPop(&processed);
+            processedBuffer_.get()->try_pop(processed);
 
             double value = 0.0;
             if (SYNTHTYPE == SynthType::resynth) {
                 auto fMult = (1.0 + pitchShift_ / 200);
                 for (int i = 0; i < _fftDataBlob.size() && i < 32; i++) {
-                    value += _fftDataBlob.at(i).amplitude *
+                    value += 0.5 * _fftDataBlob.at(i).amplitude *
                         sin(M_2PI * t * _fftDataBlob.at(i).frequency * fMult + _fftDataBlob.at(i).phase);
                 }
             }
             if (SYNTHTYPE == SynthType::ifft) {
+                auto i = outFrame_ - startOutFrame;
                 value = currentFftInverse_.at(outFrame_ - startOutFrame);
+                //0.5 * (1.0 + cos(2.0 * pi* x / (256 - 1.0))
+                //auto mult = 0.5 - 0.5 * (cos(2.0 * M_PI * k / (thisGrainSize - 1.0)));
+                value *= (1.0 + cos(2.0 * M_PI * i / (fft_.getWindowSize() - 1.0)));
             }
-            value = value > 1.0 ? 1.0 : (value < -1.0 ? 1.0 : value);
+            value = value > 1.0 ? 1.0 : (value < -1.0 ? -1.0 : value);
             auto int16Data = static_cast<AudioSample>(value * 32768.0f);
             *out++ = int16Data;
             *out++ = int16Data;
+
+            //out_.emplace_back(processed * 0.000030517578125f);//value);
 
             //*out++ = processed;
             //*out++ = processed;
@@ -283,7 +295,7 @@ PortAudioLayer::PortAudioLayerImpl::paInputCallback(    PortAudioLayer& parentLa
     AudioSample *in = (AudioSample*)inputBuffer;
 
     double gain = 1.0f;
-    double freq = 440.0f + pitchShift_;
+    double freq = 100.0f + pitchShift_;
     auto elapsedTimePerFrame = 1.0 / static_cast<double>(parentLayer.audioFormat_.sample_rate);
     auto periodFrames = static_cast<int>((1.0 / freq) / elapsedTimePerFrame);
 
@@ -297,7 +309,7 @@ PortAudioLayer::PortAudioLayerImpl::paInputCallback(    PortAudioLayer& parentLa
         //inputBuffer_.get()->tryPush(int16Data);
 
         // mic test
-        inputBuffer_.get()->tryPush(*in++);
+        inputBuffer_.get()->try_push(*in++);
     }
     fftCv_.notify_all();
 
@@ -478,12 +490,12 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
         auto fftWindowSize = fft_.getWindowSize();
         unsigned i = 0;
         while (data.size() <= fftWindowSize) {
-            if (!inputBuffer_.get()->tryPop(&sample))
+            if (!inputBuffer_.get()->try_pop(sample))
                 continue;
-            processedBuffer_.get()->tryPush(sample);
+            processedBuffer_.get()->try_push(sample);
             value = lpFilter.processSample(sample * 0.000030517578125f);
             double windowMult;
-            windowMult = 1.0;//0.5 * (1.0 - cos(2.0 * M_PI * i / (fftWindowSize - 1.0)));
+            windowMult = 0.5 * (1.0 - cos(2.0 * M_PI * i / (fftWindowSize - 1.0)));
             data.emplace_back(static_cast<double>(windowMult * value));
             ++i;
         }

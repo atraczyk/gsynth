@@ -112,7 +112,7 @@ fft_wrapper::computeInverseStft(double pitchShift)
     std::vector<double> dataBlob;
     kiss_fft(inverse_cfg_, &out_[0], &inverse_[0]);
     for (const auto& bin : inverse_) {
-        dataBlob.emplace_back(bin.r / (2 * windowSize_));
+        dataBlob.emplace_back(bin.r / (1 * windowSize_));
     }
     return dataBlob;
 }
