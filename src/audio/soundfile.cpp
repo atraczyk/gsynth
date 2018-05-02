@@ -4,6 +4,11 @@
 #include <vector>
 #include <algorithm>
 #include <stdlib.h>
+#include <math.h>
+
+#ifdef __unix
+#define fopen_s(pFile,filename,mode) ((*(pFile))=fopen((filename),  (mode)))==NULL
+#endif
 
 #include "soundfile.h"
 #include "Log.hpp"
@@ -12,7 +17,7 @@ inline void FloatToPCM(unsigned char *PCM, const float& in, size_t numBytes)
 {
     // 8 bit is unsigned
     if (numBytes == 1) {
-        PCM[0] = unsigned char((in * 0.5f + 0.5f) * 255.0f);
+        PCM[0] = static_cast<unsigned char>((in * 0.5f + 0.5f) * 255.0f);
         return;
     }
 
@@ -265,7 +270,7 @@ static float CubicHermite(float A, float B, float C, float D, float t)
 inline float SampleChannelFractional(const std::vector<float>& input, float sampleFloat, uint16_t channel, uint16_t numChannels)
 {
     size_t sample = size_t(sampleFloat);
-    float sampleFraction = sampleFloat - std::floorf(sampleFloat);
+    float sampleFraction = sampleFloat - std::floor(sampleFloat);
 
     size_t sampleIndexNeg1 = (sample > 0) ? sample - 1 : sample;
     size_t sampleIndex0 = sample;

@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cmath>
+#include <algorithm>
 
 #include "app.h"
 #include "pa_layer.h"
@@ -114,8 +115,7 @@ int main(int argc, char* argv[])
     for (int i = 0; i < nGrains; ++i) {
         if (i < nGrains - 1 && bufPos + grains.at(i).size() < out.size()) {
             for (int j = 0; j < grains.at(i).size() - 1; ++j) {
-                if (i > nGrains - 4)
-                    out.at(bufPos + j) += grains.at(i).at(j);
+                out.at(bufPos + j) += grains.at(i).at(j);
             }
             bufPos += hopSize;
             continue;
@@ -134,6 +134,8 @@ int main(int argc, char* argv[])
     //App app(512, 512);
     //app.execute(argc, argv);
 
+#ifdef _WIN32
     system("pause");
+#endif
     return 0;
 }
