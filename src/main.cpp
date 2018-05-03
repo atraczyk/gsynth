@@ -7,6 +7,7 @@
 #include "pa_layer.h"
 #include "soundfile.h"
 #include "Log.hpp"
+#include "common.h"
 
 #include "fft.h"
 
@@ -38,6 +39,7 @@ interpolate(uint32_t bufSize,
         }
         x1 = x2;
     }
+    return outBuffer;
 }
 
 int main(int argc, char* argv[])
@@ -68,21 +70,7 @@ int main(int argc, char* argv[])
     std::vector<std::vector<double>> grains(nGrains);
     std::vector<std::vector<double>> phases(nGrains, std::vector<double>(grainSize));
     std::vector<std::vector<double>> magnitudes(nGrains, std::vector<double>(grainSize));
-    //out.resize(nSamples);
-    //~ buffers.resize(nBuffers);
-    //~ grains.resize(nGrains);
-    //~ phases.resize(nGrains);
-    //~ magnitudes.resize(nGrains);
-    //~ for (auto& phase: phases) {
-        //~ phase.resize(grainSize);
-    //~ }
-    //~ for (auto& magnitude: magnitudes) {
-        //~ magnitude.resize(grainSize);
-    //~ }
-    //~ std::fill_n(out.begin(), out.size(), 0);
-    //~ for (auto& buf : buffers) {
-        //~ std::fill_n(buf.begin(), buf.size(), 0);
-    //~ }
+    std::vector<std::vector<kiss_fft_cpx>> rawffts(nGrains);
 
     DBGOUT("serializing to buffers...");
     for (int i = 0; i < nBuffers; ++i) {
@@ -131,16 +119,19 @@ int main(int argc, char* argv[])
     fft_wrapper fft(sampleRate, grainSize);
     for (int i = 0; i < nGrains; ++i) {
         // fft shift
-        DBGOUT("fft shift...");
-        std::rotate(grains.at(i).begin(),
+        //DBGOUT("fft shift...");
+        /*std::rotate(grains.at(i).begin(),
                     grains.at(i).begin() + halfGrainSize,
-                    grains.at(i).end());
+                    grains.at(i).end());*/
+
         fft.setInput(&grains.at(i)[0]);
         
         // compute fft
-        DBGOUT("computing fft...");
+        //DBGOUT("computing fft...");
         auto data = fft.computeStft();
         //fft.shift(); // ?
+        rawffts.at(i) = fft.getRawOutput();
+
         for (int j = 0; j < halfGrainSize; ++j) {
             phases.at(i).at(j) = data.at(j).phase; 
             magnitudes.at(i).at(j) = data.at(j).amplitude;
@@ -192,20 +183,44 @@ int main(int argc, char* argv[])
     for (int i = 0; i < nGrains; ++i) {
         // generate real/imag
         for(int j = 0; j < grainSize; ++j){
-            real[j] = magnitudes[i][j] * cos(newPhases[i][j]);
-            imag[j] = magnitudes[i][j] * sin(newPhases[i][j]);
+            //auto phase = static_cast<float>(phases[i][j]);
+            auto phase = static_cast<float>(phases[i][j]);
+            auto cosP = cos(phase);
+            auto mag = static_cast<float>(magnitudes[i][j]);
+            auto r_f = magnitudes[i][j] * cosP;
+            auto r_ = magnitudes[i][j] * cos(phases[i][j]);
+            auto i_ = magnitudes[i][j] * sin(phases[i][j]);
+            auto epsilon = 0.0001;
+            auto rRaw = rawffts[i][j].r;
+            auto rDiff = r_ - rawffts[i][j].r;
+            if (abs(rDiff) > epsilon) {
+                DBGOUT("r(diff) %d, %d: %0.4f, %0.4f ***** %0.4f", i, j, r_, rawffts[i][j].r, rDiff);
+                break;
+            }
+            auto iRaw = i_ - rawffts[i][j].i;
+            auto iDiff = i_ - rawffts[i][j].i;
+            if (abs(iDiff) > epsilon) {
+                DBGOUT("i(diff) %d, %d: %0.4f, %0.4f ***** %0.4f", i, j, i_, rawffts[i][j].i, iDiff);
+                break;
+            }
+            real[j] = rawffts.at(i).at(j).r;// magnitudes[i][j] * cos(phases[i][j]);
+            imag[j] = rawffts.at(i).at(j).i;// magnitudes[i][j] * sin(phases[i][j]);
+            real[j] = r_f;
+            imag[j] = i_;
         }
 
+        fft.setOutput(&real[0], &imag[0]);
+
         // compute ifft
-        DBGOUT("compute ifft...");
+        //DBGOUT("compute ifft...");
         //fft.shift(); // ?
         grains.at(i) = fft.computeInverseStft();
         
         // fft shift (reverse)
-        DBGOUT("fft shift (reverse)...");
-        std::rotate(grains.at(i).begin(),
+        //DBGOUT("fft shift (reverse)...");
+        /*std::rotate(grains.at(i).begin(),
                     grains.at(i).begin() + halfGrainSize,
-                    grains.at(i).end());
+                    grains.at(i).end());*/
     }
 
     //~ // apply crossfade window to grains

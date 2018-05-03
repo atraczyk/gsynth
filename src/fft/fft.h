@@ -21,8 +21,10 @@ public:
 
     void init(uint32_t sampleRate, uint32_t windowSize);
     void setInput(const double * realData, const double * imagData = nullptr);
+    void setOutput(const double * realData, const double * imagData);
     fftDataBlob computeStft(bool useThreshold = false);
-    std::vector<double> computeInverseStft(double pitchShift = 0.0);
+    std::vector<kiss_fft_cpx> getRawOutput();
+    std::vector<double> computeInverseStft();
     void shift();
 
     uint32_t getWindowSize() {

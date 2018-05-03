@@ -40,6 +40,15 @@ fft_wrapper::setInput(const double * realData, const double * imagData)
     }
 }
 
+void
+fft_wrapper::setOutput(const double * realData, const double * imagData)
+{
+    for (unsigned i = 0; i < windowSize_; i++) {
+        out_[i].r = realData[i];
+        out_[i].i = imagData != nullptr ? imagData[i] : 0;
+    }
+}
+
 fftDataBlob
 fft_wrapper::computeStft(bool useThreshold)
 {
@@ -56,8 +65,9 @@ fft_wrapper::computeStft(bool useThreshold)
     double threshold = 0.001; // -60.0; -60dB
 
     for (uint32_t i = 0; i < magWindowSize; i++) {
-        amplitude = sqrt((out_[i].r * out_[i].r) + (out_[i].i * out_[i].i)) /
-            static_cast<double>(magWindowSize); // dB: 20 * log10(amplitude);
+        amplitude = sqrt(static_cast<double> (out_[i].r * out_[i].r) + (out_[i].i * out_[i].i));// / static_cast<double>(magWindowSize);
+        // dB: 20 * log10(amplitude);
+        //amplitude = 20 * log10(amplitude);
 
         if (useThreshold && (amplitude < threshold)) {
             continue;
@@ -93,22 +103,15 @@ fft_wrapper::computeStft(bool useThreshold)
     return dataBlob;
 }
 
-std::vector<double>
-fft_wrapper::computeInverseStft(double pitchShift)
+std::vector<kiss_fft_cpx>
+fft_wrapper::getRawOutput()
 {
-    auto shift = static_cast<int>(fabs(pitchShift / 10));
-    if (shift && shift < 20) {
-        auto mid = out_.end() - out_.size() / 2;
-        auto rmid = out_.rend() - out_.size() / 2;
+    return out_;
+}
 
-        std::rotate(out_.begin(), out_.begin() + shift, mid);
-        std::rotate(out_.rbegin(), out_.rbegin() + shift, rmid);
-        for (int i = 0; i < shift; i++) {
-            *(mid - i) = { 0 ,0 };
-            *(rmid - i) = { 0 ,0 };
-        }
-    }
-
+std::vector<double>
+fft_wrapper::computeInverseStft()
+{
     std::vector<double> dataBlob;
     kiss_fft(inverse_cfg_, &out_[0], &inverse_[0]);
     for (const auto& bin : inverse_) {

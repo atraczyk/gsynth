@@ -242,7 +242,7 @@ PortAudioLayer::PortAudioLayerImpl::paOutputCallback(   PortAudioLayer& parentLa
                 auto fMult = (1.0 + pitchShift_ / 200);
                 for (int i = 0; i < _fftDataBlob.size() && i < 32; i++) {
                     value += 0.5 * _fftDataBlob.at(i).amplitude *
-                        sin(M_2PI * t * _fftDataBlob.at(i).frequency * fMult + _fftDataBlob.at(i).phase);
+                        sin(M_2_PI * t * _fftDataBlob.at(i).frequency * fMult + _fftDataBlob.at(i).phase);
                 }
             }
             if (SYNTHTYPE == SynthType::ifft) {
@@ -301,8 +301,8 @@ PortAudioLayer::PortAudioLayerImpl::paInputCallback(    PortAudioLayer& parentLa
 
     for (; inFrame_ < endInFrame; inFrame_++) {
         auto t = (inFrame_) * elapsedTimePerFrame;
-        auto value = sin(M_2PI * t * freq);
-        //auto value = 0.5 * sin(M_2PI * t * 354) + 0.5 * cos(M_2PI * t * 649);
+        auto value = sin(M_2_PI * t * freq);
+        //auto value = 0.5 * sin(M_2_PI * t * 354) + 0.5 * cos(M_2_PI * t * 649);
         auto int16Data = static_cast<AudioSample>(value * gain * 32768.0f);
 
         // generate sine test
@@ -504,7 +504,7 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
             std::lock_guard<std::mutex> lk(fftDataMutex_);
             currentFftData_ = fft_.computeStft();
             if (SYNTHTYPE == SynthType::ifft) {
-                currentFftInverse_ = fft_.computeInverseStft(pitchShift_);
+                currentFftInverse_ = fft_.computeInverseStft();
             }
         }
     }
