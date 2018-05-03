@@ -45,46 +45,45 @@ int main(int argc, char* argv[])
     uint16_t numChannels;
     uint32_t sampleRate;
     uint16_t bytesPerSample;
-    std::vector<float> source, out;
-    std::vector<std::vector<double>> buffers;
-    std::vector<std::vector<double>> grains;
-    std::vector<double> bufferOverlap;
-    uint32_t bufSize = 1536;
-    uint32_t hopSize = 384;
-    uint32_t grainSize = 512;
-    uint16_t grainsPerBuf = static_cast<double>(bufSize) / hopSize;
-    std::vector<std::vector<double>> phases;
-    std::vector<std::vector<double>> magnitudes;
+    std::vector<float> source;
 
-    // load file
     DBGOUT("loading file...");
     auto nSamples = ReadWaveFile("in.wav", source, numChannels, sampleRate, bytesPerSample);
     if (!nSamples) {
         return 0;
     }
+
+    uint32_t bufSize = 1536;
+    uint32_t hopSize = 384;
+    uint32_t grainSize = 512;
+    uint32_t halfGrainSize = grainSize / 2;
+    uint16_t grainsPerBuf = static_cast<double>(bufSize) / hopSize;
     auto nBuffers = static_cast<int>(ceil(static_cast<double>(nSamples) / bufSize));
     auto nGrains = grainsPerBuf * nBuffers;
     DBGOUT("samples: %d, buffers: %d, grains: %d", nSamples, nBuffers, nGrains);
 
-    // prepare buffers
     DBGOUT("preparing buffers...");
-    out.resize(nSamples);
-    buffers.resize(nBuffers);
-    grains.resize(nGrains);
-    phases.resize(nGrains);
-    magnitudes.resize(nGrains);
-    for (auto& phase: phases) {
-        phase.resize(grainSize);
-    }
-    for (auto& magnitude: magnitudes) {
-        magnitude.resize(grainSize);
-    }
-    std::fill_n(out.begin(), out.size(), 0);
-    for (auto& buf : buffers) {
-        std::fill_n(buf.begin(), buf.size(), 0);
-    }
+    std::vector<float> out(nSamples, 0);
+    std::vector<std::vector<double>> buffers(nBuffers, std::vector<double>());
+    std::vector<std::vector<double>> grains(nGrains);
+    std::vector<std::vector<double>> phases(nGrains, std::vector<double>(grainSize));
+    std::vector<std::vector<double>> magnitudes(nGrains, std::vector<double>(grainSize));
+    //out.resize(nSamples);
+    //~ buffers.resize(nBuffers);
+    //~ grains.resize(nGrains);
+    //~ phases.resize(nGrains);
+    //~ magnitudes.resize(nGrains);
+    //~ for (auto& phase: phases) {
+        //~ phase.resize(grainSize);
+    //~ }
+    //~ for (auto& magnitude: magnitudes) {
+        //~ magnitude.resize(grainSize);
+    //~ }
+    //~ std::fill_n(out.begin(), out.size(), 0);
+    //~ for (auto& buf : buffers) {
+        //~ std::fill_n(buf.begin(), buf.size(), 0);
+    //~ }
 
-    // serialize to buffers
     DBGOUT("serializing to buffers...");
     for (int i = 0; i < nBuffers; ++i) {
         size_t fromPos = i * bufSize;
@@ -98,7 +97,6 @@ int main(int argc, char* argv[])
         );
     }
 
-    // split into grains
     DBGOUT("splitting into grains...");
     for (int i = 0; i < nBuffers; ++i) {
         size_t bufPos = 0;
@@ -129,29 +127,14 @@ int main(int argc, char* argv[])
         }
     }
 
-    // process
-    DBGOUT("processing...");
+    DBGOUT("analyzing...");
     fft_wrapper fft(sampleRate, grainSize);
-    std::vector<double> real(grainSize, 0);
-    std::vector<double> imag(grainSize, 0);
-    std::vector<double> newPhase(grainSize, 0);
-    std::vector<double> omega(grainSize, 0);
-    std::vector<std::vector<double>> deltaPhi(
-        nGrains - 1,
-        std::vector<double>(grainSize, 0)
-    );
-    for (int j = 0; j < grainSize; ++j) {
-        omega.at(j) = (M_2_PI * hopSize * j) / grainSize;
-    }
-    
     for (int i = 0; i < nGrains; ++i) {
-        auto halfGrainSize = grainSize / 2;
-        
         // fft shift
         DBGOUT("fft shift...");
-        //~ std::rotate(grains.at(i).begin(),
-                    //~ grains.at(i).begin() + halfGrainSize,
-                    //~ grains.at(i).end());
+        std::rotate(grains.at(i).begin(),
+                    grains.at(i).begin() + halfGrainSize,
+                    grains.at(i).end());
         fft.setInput(&grains.at(i)[0]);
         
         // compute fft
@@ -159,21 +142,59 @@ int main(int argc, char* argv[])
         auto data = fft.computeStft();
         //fft.shift(); // ?
         for (int j = 0; j < halfGrainSize; ++j) {
-            phases.at(i).at(j) = data.at(j).phase;
+            phases.at(i).at(j) = data.at(j).phase; 
             magnitudes.at(i).at(j) = data.at(j).amplitude;
             phases.at(i).at(grainSize - j - 1) = data.at(j).phase;
             magnitudes.at(i).at(grainSize - j - 1) = data.at(j).amplitude;
         }
+    }
+    
+    // frequency domain processing
+    DBGOUT("processing...");
+    double pitchShiftRatio = 1.0;
+    std::vector<double> real(grainSize, 0);
+    std::vector<double> imag(grainSize, 0);
+    std::vector<double> omega(grainSize, 0);
+    std::vector<std::vector<double>> newPhases(
+        nGrains,
+        std::vector<double>(grainSize, 0)
+    );
+    std::vector<std::vector<double>> deltaPhi(
+        nGrains - 1,
+        std::vector<double>(grainSize, 0)
+    );
 
-        // frequency domain processing
-        // 1 unwrap phases
-        
-
+    // unwrap phases
+    for (int j = 0; j < grainSize; ++j) {
+        omega.at(j) = (M_2_PI * hopSize * j) / grainSize;
+    }
+    for(int i = 0; i < (nGrains - 1); ++i){
         for (int j = 0; j < (nGrains); ++j) {
-            
+            if (i == 0){
+                deltaPhi.at(i).at(j) = omega[j] + princArg(phases[i][j] - omega[j]);
+            } else {
+                deltaPhi.at(i).at(j) = omega[j] + princArg(phases[i][j] - phases[i-1][j] - omega[j]);
+            }
         }
-        // 2 compute new phases
-        // 3 generate real/imag
+    }
+
+    // compute new phases
+    for(int j = 0; j < grainSize; ++j){
+        newPhases[0][j] = phases[0][j];
+    }
+    for(int i = 1; i < nGrains; ++i){
+        for(int j = 0; j < grainSize; ++j){
+            newPhases[i][j] = princArg(newPhases[i-1][j] + deltaPhi[i-1][j] * pitchShiftRatio);
+        }
+    }
+
+    DBGOUT("re-synthesizing...");
+    for (int i = 0; i < nGrains; ++i) {
+        // generate real/imag
+        for(int j = 0; j < grainSize; ++j){
+            real[j] = magnitudes[i][j] * cos(newPhases[i][j]);
+            imag[j] = magnitudes[i][j] * sin(newPhases[i][j]);
+        }
 
         // compute ifft
         DBGOUT("compute ifft...");
@@ -182,9 +203,9 @@ int main(int argc, char* argv[])
         
         // fft shift (reverse)
         DBGOUT("fft shift (reverse)...");
-        //~ std::rotate(grains.at(i).begin(),
-                    //~ grains.at(i).begin() + halfGrainSize,
-                    //~ grains.at(i).end());
+        std::rotate(grains.at(i).begin(),
+                    grains.at(i).begin() + halfGrainSize,
+                    grains.at(i).end());
     }
 
     //~ // apply crossfade window to grains
