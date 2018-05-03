@@ -32,11 +32,11 @@ void fft_wrapper::init(uint32_t sampleRate, uint32_t windowSize)
 }
 
 void
-fft_wrapper::setRealInput(const double * realData)
+fft_wrapper::setInput(const double * realData, const double * imagData)
 {
     for (unsigned i = 0; i < windowSize_; i++) {
         in_[i].r = realData[i];
-        in_[i].i = 0;
+        in_[i].i = imagData != nullptr ? imagData[i] : 0;
     }
 }
 
@@ -117,3 +117,10 @@ fft_wrapper::computeInverseStft(double pitchShift)
     return dataBlob;
 }
 
+void
+fft_wrapper::shift()
+{
+    std::rotate(out_.begin(),
+                out_.begin() + out_.size() / 2,
+                out_.end());
+}

@@ -20,9 +20,10 @@ public:
     ~fft_wrapper();
 
     void init(uint32_t sampleRate, uint32_t windowSize);
-    void setRealInput(const double * realData);
+    void setInput(const double * realData, const double * imagData = nullptr);
     fftDataBlob computeStft(bool useThreshold = false);
-    std::vector<double> computeInverseStft(double pitchShift);
+    std::vector<double> computeInverseStft(double pitchShift = 0.0);
+    void shift();
 
     uint32_t getWindowSize() {
         return windowSize_;

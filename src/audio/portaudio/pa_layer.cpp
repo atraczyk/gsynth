@@ -180,9 +180,9 @@ PortAudioLayer::PortAudioLayerImpl::getDeviceByType(bool playback) const
     int numDevices = 0;
 
     numDevices = Pa_GetDeviceCount();
-    if (numDevices < 0)
+    if (numDevices < 0) {
         DBGOUT("PortAudioLayer error : %s", Pa_GetErrorText(numDevices));
-    else {
+    } else {
         for (int i = 0; i < numDevices; i++) {
             const auto deviceInfo = Pa_GetDeviceInfo(i);
             if (playback) {
@@ -499,7 +499,7 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
             data.emplace_back(static_cast<double>(windowMult * value));
             ++i;
         }
-        fft_.setRealInput(&data[0]);
+        fft_.setInput(&data[0]);
         {
             std::lock_guard<std::mutex> lk(fftDataMutex_);
             currentFftData_ = fft_.computeStft();

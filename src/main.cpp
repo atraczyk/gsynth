@@ -10,6 +10,36 @@
 
 #include "fft.h"
 
+double
+princArg(double phaseIn)
+{
+    double a = phaseIn / M_2_PI;
+    return phaseIn - round(a) * M_2_PI;
+}
+
+std::vector<double>
+interpolate(uint32_t bufSize,
+            std::vector<double> buffer,
+            double pitchShiftRatio)
+{
+    std::vector<double> outBuffer(bufSize, 0);
+    auto factor = 1.0 / pitchShiftRatio;
+    auto x1 = 0;
+    
+    for (int i = 0; i < bufSize; ++i) {
+        auto y1 = buffer.at(i);
+        auto x2 = x1 + factor;
+        auto y2 = buffer.at(i + 1);
+
+        for (int j = 0; j < (floor(factor) + 1); ++i) {
+            auto xt = x1 + j;
+            auto yt = (y2 - y1) / (x2 - x1) * (xt - x1) + y1;
+            outBuffer.at(xt) = yt;
+        }
+        x1 = x2;
+    }
+}
+
 int main(int argc, char* argv[])
 {
     uint16_t numChannels;
@@ -23,6 +53,8 @@ int main(int argc, char* argv[])
     uint32_t hopSize = 384;
     uint32_t grainSize = 512;
     uint16_t grainsPerBuf = static_cast<double>(bufSize) / hopSize;
+    std::vector<std::vector<double>> phases;
+    std::vector<std::vector<double>> magnitudes;
 
     // load file
     DBGOUT("loading file...");
@@ -39,6 +71,14 @@ int main(int argc, char* argv[])
     out.resize(nSamples);
     buffers.resize(nBuffers);
     grains.resize(nGrains);
+    phases.resize(nGrains);
+    magnitudes.resize(nGrains);
+    for (auto& phase: phases) {
+        phase.resize(grainSize);
+    }
+    for (auto& magnitude: magnitudes) {
+        magnitude.resize(grainSize);
+    }
     std::fill_n(out.begin(), out.size(), 0);
     for (auto& buf : buffers) {
         std::fill_n(buf.begin(), buf.size(), 0);
@@ -89,7 +129,65 @@ int main(int argc, char* argv[])
         }
     }
 
-    // apply crossfade window to grains
+    // process
+    DBGOUT("processing...");
+    fft_wrapper fft(sampleRate, grainSize);
+    std::vector<double> real(grainSize, 0);
+    std::vector<double> imag(grainSize, 0);
+    std::vector<double> newPhase(grainSize, 0);
+    std::vector<double> omega(grainSize, 0);
+    std::vector<std::vector<double>> deltaPhi(
+        nGrains - 1,
+        std::vector<double>(grainSize, 0)
+    );
+    for (int j = 0; j < grainSize; ++j) {
+        omega.at(j) = (M_2_PI * hopSize * j) / grainSize;
+    }
+    
+    for (int i = 0; i < nGrains; ++i) {
+        auto halfGrainSize = grainSize / 2;
+        
+        // fft shift
+        DBGOUT("fft shift...");
+        //~ std::rotate(grains.at(i).begin(),
+                    //~ grains.at(i).begin() + halfGrainSize,
+                    //~ grains.at(i).end());
+        fft.setInput(&grains.at(i)[0]);
+        
+        // compute fft
+        DBGOUT("computing fft...");
+        auto data = fft.computeStft();
+        //fft.shift(); // ?
+        for (int j = 0; j < halfGrainSize; ++j) {
+            phases.at(i).at(j) = data.at(j).phase;
+            magnitudes.at(i).at(j) = data.at(j).amplitude;
+            phases.at(i).at(grainSize - j - 1) = data.at(j).phase;
+            magnitudes.at(i).at(grainSize - j - 1) = data.at(j).amplitude;
+        }
+
+        // frequency domain processing
+        // 1 unwrap phases
+        
+
+        for (int j = 0; j < (nGrains); ++j) {
+            
+        }
+        // 2 compute new phases
+        // 3 generate real/imag
+
+        // compute ifft
+        DBGOUT("compute ifft...");
+        //fft.shift(); // ?
+        grains.at(i) = fft.computeInverseStft();
+        
+        // fft shift (reverse)
+        DBGOUT("fft shift (reverse)...");
+        //~ std::rotate(grains.at(i).begin(),
+                    //~ grains.at(i).begin() + halfGrainSize,
+                    //~ grains.at(i).end());
+    }
+
+    //~ // apply crossfade window to grains
     DBGOUT("applying crossfade window to grains...");
     for (int i = 0; i < nGrains; ++i) {
         auto thisGrainSize = grains.at(i).size();

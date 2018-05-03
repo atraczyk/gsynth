@@ -39,8 +39,7 @@
   #else
    #define FILENAME(X)              (strrchr(X, SEPERATOR) ? strrchr(X, SEPERATOR) + 1 : X)
    #define STR(EXP)                #EXP
-   #define XSTR(X)                 STR(X)
-   //#define LINE                  
+   #define XSTR(X)                 STR(X)                 
    #define LOG_FORMAT(M, ...)      M, __VA_ARGS__
    #define LOGGER(m, ...)          consoleLog(__FILE__, " :" XSTR(__LINE__), LOG_FORMAT(m, __VA_ARGS__))
    #define DBGOUT(m, ...)          LOGGER(m, __VA_ARGS__)
@@ -85,4 +84,7 @@ consoleLog(const char* filename, const char* lineno, char const *m, ...)
 }
 #else
  #define DBGOUT(m, ...)
+ #ifdef _DEBUGPRINTF
+  #define DBGOUT(m, ...)          printf(m, ## __VA_ARGS__); printf("\n")
+ #endif
 #endif

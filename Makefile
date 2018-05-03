@@ -1,6 +1,6 @@
 IDIRS=-I../src -Isrc -Isrc/audio -Isrc/audio/portaudio -Isrc/fft -Isrc/fft/kiss_fft
 CC=g++
-CFLAGS=-I$(IDIRS) -std=c++11
+CFLAGS=-I$(IDIRS) -std=c++11 -D_DEBUGPRINTF
 
 LIBS=-lSDL2 -lm -lpthread -lportaudio -lGL -lncurses
 
