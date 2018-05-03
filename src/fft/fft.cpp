@@ -50,41 +50,24 @@ fft_wrapper::setOutput(const double * realData, const double * imagData)
 }
 
 fftDataBlob
-fft_wrapper::computeStft(bool useThreshold)
+fft_wrapper::computeStft()
 {
     fftDataBlob dataBlob;
 
     kiss_fft(cfg_, &in_[0], &out_[0]);
-
-    using magInd = std::pair<double, double>;
-    std::vector<magInd> magInds;
 
     auto magWindowSize = windowSize_ / 2;
     double freqPerBin = sampleRate_ / windowSize_;
     double frequency, amplitude, phase;
     double threshold = 0.001; // -60.0; -60dB
 
-    for (uint32_t i = 0; i < magWindowSize; i++) {
-        amplitude = sqrt(static_cast<double> (out_[i].r * out_[i].r) + (out_[i].i * out_[i].i));// / static_cast<double>(magWindowSize);
-        // dB: 20 * log10(amplitude);
-        //amplitude = 20 * log10(amplitude);
-
-        if (useThreshold && (amplitude < threshold)) {
-            continue;
-        }
-        
+    for (uint32_t i = 0; i < windowSize_; i++) {
+        amplitude = sqrt(
+            static_cast<double>(out_[i].r * out_[i].r) +
+            static_cast<double>(out_[i].i * out_[i].i)
+        );
         frequency = i * freqPerBin;
-
-        if (out_[i].i == 0.0) {
-            phase = 0.0;
-        }
-        else if (out_[i].r == 0.0) {
-            phase = out_[i].i > 0.0 ? M_PI_2 : -M_PI_2;
-        }
-        else {
-            phase = atan2(out_[i].i, out_[i].r);
-        }
-
+        phase = atan2(static_cast<double>(out_[i].i), static_cast<double>(out_[i].r));
         dataBlob.emplace_back(fftData{ frequency, amplitude, phase });
     }
 
@@ -118,12 +101,4 @@ fft_wrapper::computeInverseStft()
         dataBlob.emplace_back(bin.r / (1 * windowSize_));
     }
     return dataBlob;
-}
-
-void
-fft_wrapper::shift()
-{
-    std::rotate(out_.begin(),
-                out_.begin() + out_.size() / 2,
-                out_.end());
 }

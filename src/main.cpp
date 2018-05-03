@@ -6,6 +6,7 @@
 #include "app.h"
 #include "pa_layer.h"
 #include "soundfile.h"
+#include "filter.h"
 #include "Log.hpp"
 #include "common.h"
 
@@ -18,28 +19,38 @@ princArg(double phaseIn)
     return phaseIn - round(a) * M_2_PI;
 }
 
-std::vector<double>
+void
 interpolate(uint32_t bufSize,
-            std::vector<double> buffer,
+            std::vector<double>& buffer,
             double pitchShiftRatio)
 {
-    std::vector<double> outBuffer(bufSize, 0);
+    std::vector<double> bufferCpy { buffer };
     auto factor = 1.0 / pitchShiftRatio;
     auto x1 = 0;
     
-    for (int i = 0; i < bufSize; ++i) {
-        auto y1 = buffer.at(i);
+    for (int i = 0; i < bufSize - 1; ++i) {
+        auto y1 = bufferCpy.at(i);
         auto x2 = x1 + factor;
-        auto y2 = buffer.at(i + 1);
+        auto y2 = bufferCpy.at(i + 1);
 
-        for (int j = 0; j < (floor(factor) + 1); ++i) {
-            auto xt = x1 + j;
+        for (int j = 0; j < (floor(factor) + 1); ++j) {
+            auto xt = std::min((int)bufSize - 1, x1 + j);
             auto yt = (y2 - y1) / (x2 - x1) * (xt - x1) + y1;
-            outBuffer.at(xt) = yt;
+            buffer.at(xt) = yt;
         }
         x1 = x2;
     }
-    return outBuffer;
+}
+
+template<typename T>
+void
+fftShift(T buffer)
+{
+    std::rotate(
+        buffer.begin(),
+        buffer.begin() + buffer.size() / 2,
+        buffer.end()
+    );
 }
 
 int main(int argc, char* argv[])
@@ -50,14 +61,17 @@ int main(int argc, char* argv[])
     std::vector<float> source;
 
     DBGOUT("loading file...");
-    auto nSamples = ReadWaveFile("in.wav", source, numChannels, sampleRate, bytesPerSample);
+    auto nSamples = ReadWaveFile("in2.wav", source, numChannels, sampleRate, bytesPerSample);
     if (!nSamples) {
         return 0;
     }
 
-    uint32_t bufSize = 1536;
-    uint32_t hopSize = 384;
-    uint32_t grainSize = 512;
+    LowPassFilter lpFilter(sampleRate, 4000.0, 1.0, 8.0);
+
+    double bufSizeMultiplier = 2.0;
+    uint32_t bufSize = 1536 * bufSizeMultiplier;
+    uint32_t hopSize = 384 * bufSizeMultiplier;
+    uint32_t grainSize = 512 * bufSizeMultiplier;
     uint32_t halfGrainSize = grainSize / 2;
     uint16_t grainsPerBuf = static_cast<double>(bufSize) / hopSize;
     auto nBuffers = static_cast<int>(ceil(static_cast<double>(nSamples) / bufSize));
@@ -118,31 +132,54 @@ int main(int argc, char* argv[])
     DBGOUT("analyzing...");
     fft_wrapper fft(sampleRate, grainSize);
     for (int i = 0; i < nGrains; ++i) {
+        // lp filter
+        for (int j = 0; j < grains.at(i).size(); ++j) {
+            grains.at(i).at(j) = lpFilter.processSample(grains.at(i).at(j));
+        }
+
+        // windowing
+        auto dgrainSize = static_cast<double>(grainSize);
+        double window;
+        int windowType = 0;
+        for (double j = 0; j < grains.at(i).size(); ++j) {
+            if (windowType == 0) { // Hann
+                window = 0.5 * (1.0 - cos(2.0 * M_PI * j / (dgrainSize - 1)));
+            }
+            else if(windowType == 1) { // Hamming
+                window = 0.54 - 0.46 * cos(2.0 * M_PI * j / (dgrainSize - 1));
+            }
+            else if (windowType == 2) { // Welch
+                auto f = (((j - (dgrainSize - 1) / 2)) / ((dgrainSize - 1) / 2));
+                window = 1.0 - f * f;
+            }
+            else if (windowType == 3) { // Blackman-Harris
+                auto f = M_PI * j / (dgrainSize - 1);
+                window =    0.35875 -
+                            0.48829 * cos(2 * f) +
+                            0.14128 * cos(4 * f) -
+                            0.01168 * cos(6 * f);
+            }
+            grains.at(i).at(j) *= window;
+        }
+
         // fft shift
-        //DBGOUT("fft shift...");
-        /*std::rotate(grains.at(i).begin(),
-                    grains.at(i).begin() + halfGrainSize,
-                    grains.at(i).end());*/
+        fftShift(grains.at(i));
 
         fft.setInput(&grains.at(i)[0]);
         
         // compute fft
-        //DBGOUT("computing fft...");
         auto data = fft.computeStft();
-        //fft.shift(); // ?
         rawffts.at(i) = fft.getRawOutput();
 
-        for (int j = 0; j < halfGrainSize; ++j) {
+        for (int j = 0; j < grainSize; ++j) {
             phases.at(i).at(j) = data.at(j).phase; 
             magnitudes.at(i).at(j) = data.at(j).amplitude;
-            phases.at(i).at(grainSize - j - 1) = data.at(j).phase;
-            magnitudes.at(i).at(grainSize - j - 1) = data.at(j).amplitude;
         }
     }
     
     // frequency domain processing
     DBGOUT("processing...");
-    double pitchShiftRatio = 1.0;
+    double pitchShiftRatio = 1.0 / 2.0;
     std::vector<double> real(grainSize, 0);
     std::vector<double> imag(grainSize, 0);
     std::vector<double> omega(grainSize, 0);
@@ -160,7 +197,7 @@ int main(int argc, char* argv[])
         omega.at(j) = (M_2_PI * hopSize * j) / grainSize;
     }
     for(int i = 0; i < (nGrains - 1); ++i){
-        for (int j = 0; j < (nGrains); ++j) {
+        for (int j = 0; j < grainSize; ++j) {
             if (i == 0){
                 deltaPhi.at(i).at(j) = omega[j] + princArg(phases[i][j] - omega[j]);
             } else {
@@ -183,47 +220,22 @@ int main(int argc, char* argv[])
     for (int i = 0; i < nGrains; ++i) {
         // generate real/imag
         for(int j = 0; j < grainSize; ++j){
-            //auto phase = static_cast<float>(phases[i][j]);
-            auto phase = static_cast<float>(phases[i][j]);
-            auto cosP = cos(phase);
-            auto mag = static_cast<float>(magnitudes[i][j]);
-            auto r_f = magnitudes[i][j] * cosP;
-            auto r_ = magnitudes[i][j] * cos(phases[i][j]);
-            auto i_ = magnitudes[i][j] * sin(phases[i][j]);
-            auto epsilon = 0.0001;
-            auto rRaw = rawffts[i][j].r;
-            auto rDiff = r_ - rawffts[i][j].r;
-            if (abs(rDiff) > epsilon) {
-                DBGOUT("r(diff) %d, %d: %0.4f, %0.4f ***** %0.4f", i, j, r_, rawffts[i][j].r, rDiff);
-                break;
-            }
-            auto iRaw = i_ - rawffts[i][j].i;
-            auto iDiff = i_ - rawffts[i][j].i;
-            if (abs(iDiff) > epsilon) {
-                DBGOUT("i(diff) %d, %d: %0.4f, %0.4f ***** %0.4f", i, j, i_, rawffts[i][j].i, iDiff);
-                break;
-            }
-            real[j] = rawffts.at(i).at(j).r;// magnitudes[i][j] * cos(phases[i][j]);
-            imag[j] = rawffts.at(i).at(j).i;// magnitudes[i][j] * sin(phases[i][j]);
-            real[j] = r_f;
-            imag[j] = i_;
+            real[j] = magnitudes[i][j] * cos(newPhases[i][j]);
+            imag[j] = magnitudes[i][j] * sin(newPhases[i][j]);
         }
 
         fft.setOutput(&real[0], &imag[0]);
 
         // compute ifft
-        //DBGOUT("compute ifft...");
-        //fft.shift(); // ?
         grains.at(i) = fft.computeInverseStft();
         
         // fft shift (reverse)
-        //DBGOUT("fft shift (reverse)...");
-        /*std::rotate(grains.at(i).begin(),
-                    grains.at(i).begin() + halfGrainSize,
-                    grains.at(i).end());*/
+        fftShift(grains.at(i));
+
+        interpolate(grainSize, grains.at(i), pitchShiftRatio);
     }
 
-    //~ // apply crossfade window to grains
+    // apply crossfade window to grains
     DBGOUT("applying crossfade window to grains...");
     for (int i = 0; i < nGrains; ++i) {
         auto thisGrainSize = grains.at(i).size();
@@ -240,6 +252,14 @@ int main(int argc, char* argv[])
                 mult = (-j / crossfadeSize) + (thisGrainSize / crossfadeSize);
             }
             grains.at(i).at(j) *= mult;
+        }
+    }
+
+    // gain adjust
+    double gain = 2.0;
+    for (int i = 0; i < nGrains; ++i) {
+        for (int j = 0; j < grainSize; ++j) {
+            grains.at(i).at(j) *= gain;
         }
     }
 
