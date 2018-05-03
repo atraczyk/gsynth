@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
     std::vector<float> source;
 
     DBGOUT("loading file...");
-    auto nSamples = ReadWaveFile("in2.wav", source, numChannels, sampleRate, bytesPerSample);
+    auto nSamples = ReadWaveFile("in3.wav", source, numChannels, sampleRate, bytesPerSample);
     if (!nSamples) {
         return 0;
     }
@@ -70,7 +70,7 @@ int main(int argc, char* argv[])
 
     double bufSizeMultiplier = 2.0;
     uint32_t bufSize = 1536 * bufSizeMultiplier;
-    uint32_t hopSize = 384 * bufSizeMultiplier;
+    uint32_t hopSize = 256 * bufSizeMultiplier;
     uint32_t grainSize = 512 * bufSizeMultiplier;
     uint32_t halfGrainSize = grainSize / 2;
     uint16_t grainsPerBuf = static_cast<double>(bufSize) / hopSize;
@@ -122,7 +122,10 @@ int main(int argc, char* argv[])
             if (i < nBuffers - 1 && truncatedBufSize < grainSize) {
                 std::copy_n(
                     buffers.at(i + 1).begin(),
-                    grainSize - truncatedBufSize,
+                    std::min(
+                        (size_t)(grainSize - truncatedBufSize),
+                        buffers.at(i + 1).size()
+                    ),
                     std::back_inserter(grains.at(grainIndex))
                 );
             }
@@ -165,7 +168,7 @@ int main(int argc, char* argv[])
         // fft shift
         fftShift(grains.at(i));
 
-        fft.setInput(&grains.at(i)[0]);
+        fft.setData(FFTDirection::In, grains.at(i));
         
         // compute fft
         auto data = fft.computeStft();
@@ -179,7 +182,7 @@ int main(int argc, char* argv[])
     
     // frequency domain processing
     DBGOUT("processing...");
-    double pitchShiftRatio = 1.0 / 2.0;
+    double pitchShiftRatio = 0.5;
     std::vector<double> real(grainSize, 0);
     std::vector<double> imag(grainSize, 0);
     std::vector<double> omega(grainSize, 0);
@@ -224,7 +227,7 @@ int main(int argc, char* argv[])
             imag[j] = magnitudes[i][j] * sin(newPhases[i][j]);
         }
 
-        fft.setOutput(&real[0], &imag[0]);
+        fft.setData(FFTDirection::Out , real, imag);
 
         // compute ifft
         grains.at(i) = fft.computeInverseStft();
@@ -239,9 +242,9 @@ int main(int argc, char* argv[])
     DBGOUT("applying crossfade window to grains...");
     for (int i = 0; i < nGrains; ++i) {
         auto thisGrainSize = grains.at(i).size();
+        double crossfadeSize = thisGrainSize - hopSize;
         for (int j = 0; j < thisGrainSize; ++j) {
             double mult = 1.0;
-            auto crossfadeSize = thisGrainSize * 0.25;
             if (j < crossfadeSize) {
                 mult = j / (crossfadeSize);
             }
@@ -256,7 +259,7 @@ int main(int argc, char* argv[])
     }
 
     // gain adjust
-    double gain = 2.0;
+    double gain = 1.5;
     for (int i = 0; i < nGrains; ++i) {
         for (int j = 0; j < grainSize; ++j) {
             grains.at(i).at(j) *= gain;
@@ -289,7 +292,7 @@ int main(int argc, char* argv[])
     //app.execute(argc, argv);
 
 #ifdef _WIN32
-    system("pause");
+    //system("pause");
 #endif
     return 0;
 }

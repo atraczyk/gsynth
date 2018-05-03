@@ -12,6 +12,11 @@ struct fftData {
 };
 using fftDataBlob = std::vector<fftData>;
 
+enum FFTDirection {
+    In = 1,
+    Out = 0
+};
+
 class fft_wrapper
 {
 public:
@@ -20,8 +25,9 @@ public:
     ~fft_wrapper();
 
     void init(uint32_t sampleRate, uint32_t windowSize);
-    void setInput(const double * realData, const double * imagData = nullptr);
-    void setOutput(const double * realData, const double * imagData);
+    void setData(   FFTDirection direction,
+                    const std::vector<double>& realData,
+                    const std::vector<double>& imagData = std::vector<double>());
     fftDataBlob computeStft();
     std::vector<kiss_fft_cpx> getRawOutput();
     std::vector<double> computeInverseStft();

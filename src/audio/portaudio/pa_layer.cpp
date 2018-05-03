@@ -499,7 +499,7 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
             data.emplace_back(static_cast<double>(windowMult * value));
             ++i;
         }
-        fft_.setInput(&data[0]);
+        fft_.setData(FFTDirection::In, data);
         {
             std::lock_guard<std::mutex> lk(fftDataMutex_);
             currentFftData_ = fft_.computeStft();

@@ -32,20 +32,14 @@ void fft_wrapper::init(uint32_t sampleRate, uint32_t windowSize)
 }
 
 void
-fft_wrapper::setInput(const double * realData, const double * imagData)
+fft_wrapper::setData(   FFTDirection direction,
+                        const std::vector<double>& realData,
+                        const std::vector<double>& imagData)
 {
+    auto& data = direction == FFTDirection::In ? in_ : out_;
     for (unsigned i = 0; i < windowSize_; i++) {
-        in_[i].r = realData[i];
-        in_[i].i = imagData != nullptr ? imagData[i] : 0;
-    }
-}
-
-void
-fft_wrapper::setOutput(const double * realData, const double * imagData)
-{
-    for (unsigned i = 0; i < windowSize_; i++) {
-        out_[i].r = realData[i];
-        out_[i].i = imagData != nullptr ? imagData[i] : 0;
+        data[i].r = !realData.empty() ? realData[i] : 0;
+        data[i].i = !imagData.empty() ? imagData[i] : 0;
     }
 }
 
