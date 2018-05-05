@@ -43,6 +43,16 @@ fft_wrapper::setData(   FFTDirection direction,
     }
 }
 
+void 
+fft_wrapper::setData(   FFTDirection direction,
+                        const std::vector<kiss_fft_cpx>& cpxData)
+{
+    auto& data = direction == FFTDirection::In ? in_ : out_;
+    for (unsigned i = 0; i < windowSize_; i++) {
+        data[i] = cpxData[i];
+    }
+}
+
 fftDataBlob
 fft_wrapper::computeStft()
 {

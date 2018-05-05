@@ -28,6 +28,8 @@ public:
     void setData(   FFTDirection direction,
                     const std::vector<double>& realData,
                     const std::vector<double>& imagData = std::vector<double>());
+    void setData(   FFTDirection direction,
+                    const std::vector<kiss_fft_cpx>& realData);
     fftDataBlob computeStft();
     std::vector<kiss_fft_cpx> getRawOutput();
     std::vector<double> computeInverseStft();

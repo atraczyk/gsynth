@@ -54,7 +54,6 @@
 #include <math.h>
 #include <stdio.h>
 
-#define M_PI 3.14159265358979323846
 #define MAX_FRAME_LENGTH 8192
 
 void smbFft(float *fftBuffer, long fftFrameSize, long sign);
@@ -83,7 +82,7 @@ Author: (c)1999-2015 Stephan M. Bernsee <s.bernsee [AT] zynaptiq [DOT] com>
     static float gAnaMagn[MAX_FRAME_LENGTH];
     static float gSynFreq[MAX_FRAME_LENGTH];
     static float gSynMagn[MAX_FRAME_LENGTH];
-    static long gRover = false, gInit = false;
+    static long inBufPos = false, gInit = false;
     double magn, phase, tmp, window, real, imag;
     double freqPerBin, expct;
     long i, k, qpd, index, inFifoLatency, stepSize, fftFrameSize2;
@@ -94,7 +93,7 @@ Author: (c)1999-2015 Stephan M. Bernsee <s.bernsee [AT] zynaptiq [DOT] com>
     freqPerBin = sampleRate / (double)fftFrameSize;
     expct = 2.*M_PI*(double)stepSize / (double)fftFrameSize;
     inFifoLatency = fftFrameSize - stepSize;
-    if (gRover == false) gRover = inFifoLatency;
+    if (inBufPos == false) inBufPos = inFifoLatency;
 
     /* initialize our static arrays */
     if (gInit == false) {
@@ -113,14 +112,14 @@ Author: (c)1999-2015 Stephan M. Bernsee <s.bernsee [AT] zynaptiq [DOT] com>
     for (i = 0; i < numSampsToProcess; i++) {
 
         /* As long as we have not yet collected enough data just read in */
-        gInFIFO[gRover] = indata[i];
-        outdata[i] = gOutFIFO[gRover - inFifoLatency];
-        gRover++;
+        gInFIFO[inBufPos] = indata[i];
+        outdata[i] = gOutFIFO[inBufPos - inFifoLatency];
+        inBufPos++;
 
         /* now we have enough data for processing */
-        if (gRover >= fftFrameSize) {
-            DBGOUT("processing... i: %d", i);
-            gRover = inFifoLatency;
+        if (inBufPos >= fftFrameSize) {
+            //DBGOUT("processing... i: %d", i);
+            inBufPos = inFifoLatency;
 
             /* do windowing and re,im interleave */
             for (k = 0; k < fftFrameSize; k++) {
@@ -376,20 +375,27 @@ void pitchShift1(float pitchShiftRatio, long nSamples, float sampleRate, const s
 
     double bufSizeMultiplier = 2.0;
     uint32_t bufSize = 1536 * bufSizeMultiplier;
-    uint32_t hopSize = 256 * bufSizeMultiplier;
     uint32_t grainSize = 512 * bufSizeMultiplier;
+
+    ///////////////////////////////////////////////////
+    double magn, phase, tmp, window, real, imag;
+    double freqPerBin, expct;
+    long i, k, qpd, index;
+    long osamp = 8;
+
+    /* set up some handy variables */
+    long fftFrameSize2 = grainSize / 2;
+    long stepSize = grainSize / osamp;
+    freqPerBin = sampleRate / (double)grainSize;
+    expct = M_2_PI * (double)stepSize / (double)grainSize;
+    ///////////////////////////////////////////////////
+
     uint32_t halfGrainSize = grainSize / 2;
+    uint32_t hopSize = stepSize;//256 * bufSizeMultiplier;
     uint16_t grainsPerBuf = static_cast<double>(bufSize) / hopSize;
     auto nBuffers = static_cast<int>(ceil(static_cast<double>(nSamples) / bufSize));
     auto nGrains = grainsPerBuf * nBuffers;
     DBGOUT("samples: %d, buffers: %d, grains: %d", nSamples, nBuffers, nGrains);
-
-    DBGOUT("preparing buffers...");
-    std::vector<std::vector<double>> buffers(nBuffers, std::vector<double>());
-    std::vector<std::vector<double>> grains(nGrains);
-    std::vector<std::vector<double>> phases(nGrains, std::vector<double>(grainSize));
-    std::vector<std::vector<double>> magnitudes(nGrains, std::vector<double>(grainSize));
-    std::vector<std::vector<kiss_fft_cpx>> rawffts(nGrains);
 
     ///////////////////////////////////////////////////
     std::vector<std::vector<double>> gLastPhase(
@@ -416,17 +422,14 @@ void pitchShift1(float pitchShiftRatio, long nSamples, float sampleRate, const s
         nGrains,
         std::vector<double>(grainSize, 0)
     );
-    
-    double magn, phase, tmp, window, real, imag;
-    double freqPerBin, expct;
-    long i, k, qpd, index, inFifoLatency, stepSize, fftFrameSize2;
-    long osamp = 8;
+    ///////////////////////////////////////////////////
 
-    /* set up some handy variables */
-    fftFrameSize2 = grainSize / 2;
-    stepSize = grainSize / osamp;
-    freqPerBin = sampleRate / (double)grainSize;
-    expct = M_2_PI * (double)stepSize / (double)grainSize;
+    DBGOUT("preparing buffers...");
+    std::vector<std::vector<double>> buffers(nBuffers, std::vector<double>());
+    std::vector<std::vector<double>> grains(nGrains);
+    std::vector<std::vector<double>> phases(nGrains, std::vector<double>(grainSize));
+    std::vector<std::vector<double>> magnitudes(nGrains, std::vector<double>(grainSize));
+    std::vector<std::vector<kiss_fft_cpx>> rawffts(nGrains);
 
     DBGOUT("serializing to buffers...");
     for (int i = 0; i < nBuffers; ++i) {
@@ -446,7 +449,8 @@ void pitchShift1(float pitchShiftRatio, long nSamples, float sampleRate, const s
         size_t bufPos = 0;
         for (int j = 0; j < grainsPerBuf; ++j) {
             auto grainIndex = i * grainsPerBuf + j;
-            if (j < grainsPerBuf - 1 && i < nBuffers - 1) {
+            //DBGOUT("grainIndex %d", grainIndex);
+            if (j < grainsPerBuf - 1 && i < nBuffers - 1 && bufPos + grainSize < bufSize) {
                 std::copy_n(
                     buffers.at(i).begin() + bufPos,
                     grainSize,
@@ -478,9 +482,10 @@ void pitchShift1(float pitchShiftRatio, long nSamples, float sampleRate, const s
     fft_wrapper fft(sampleRate, grainSize);
     for (int i = 0; i < nGrains; ++i) {
         // windowing
+        //DBGOUT("windowing");
         auto dgrainSize = static_cast<double>(grainSize);
         double window;
-        int windowType = 0;
+        int windowType = 4;
         for (double j = 0; j < grains.at(i).size(); ++j) {
             if (windowType == 0) { // Hann
                 window = 0.5 * (1.0 - cos(2.0 * M_PI * j / (dgrainSize - 1)));
@@ -499,23 +504,30 @@ void pitchShift1(float pitchShiftRatio, long nSamples, float sampleRate, const s
                             0.14128 * cos(4 * f) -
                             0.01168 * cos(6 * f);
             }
+            else if (windowType == 4) {
+                window = -0.5 * cos(M_2_PI * j / dgrainSize) + 0.5;
+            }
             grains.at(i).at(j) *= window;
         }
 
         // fft shift
-        fftShift(grains.at(i));
+        //fftShift(grains.at(i));
 
+        //DBGOUT("setData %d", i);
         fft.setData(FFTDirection::In, grains.at(i));
         
         // compute fft
+        //DBGOUT("computeStft");
         auto data = fft.computeStft();
         rawffts.at(i) = fft.getRawOutput();
 
+        //DBGOUT("comp mags/phases");
         for (int j = 0; j < grainSize; ++j) {
             phases.at(i).at(j) = data.at(j).phase; 
             magnitudes.at(i).at(j) = data.at(j).amplitude;
         }
 
+        //DBGOUT("comp Ana");
         for (int k = 0; k <= grains.at(i).size() / 2; k++) {
             /* de-interlace FFT buffer */
             real = rawffts[i][k].r;
@@ -656,7 +668,7 @@ void pitchShift1(float pitchShiftRatio, long nSamples, float sampleRate, const s
         grains.at(i) = fft.computeInverseStft();
         
         // fft shift (reverse)
-        fftShift(grains.at(i));
+        //fftShift(grains.at(i));
 
         //interpolate(grainSize, grains.at(i), pitchShiftRatio);
     }
@@ -677,15 +689,18 @@ void pitchShift1(float pitchShiftRatio, long nSamples, float sampleRate, const s
             else if (thisGrainSize - crossfadeSize < j) {
                 mult = (-j / crossfadeSize) + (thisGrainSize / crossfadeSize);
             }
+            mult = -0.5 * cos(M_2_PI * j / thisGrainSize) + 0.5;
             grains.at(i).at(j) *= mult;
         }
     }
 
     // gain adjust
-    double gain = 1.5;
-    for (int i = 0; i < nGrains; ++i) {
-        for (int j = 0; j < grainSize; ++j) {
-            grains.at(i).at(j) *= gain;
+    double gain = 1.0;
+    if (gain != 1.0) {
+        for (int i = 0; i < nGrains; ++i) {
+            for (int j = 0; j < grainSize; ++j) {
+                grains.at(i).at(j) *= gain;
+            }
         }
     }
 
@@ -693,15 +708,187 @@ void pitchShift1(float pitchShiftRatio, long nSamples, float sampleRate, const s
     DBGOUT("overlap-adding grains to output buffer...");
     size_t bufPos = 0;
     for (int i = 0; i < nGrains; ++i) {
-        if (i < nGrains - 1 && bufPos + grains.at(i).size() < out.size()) {
-            for (int j = 0; j < grains.at(i).size() - 1; ++j) {
-                out.at(bufPos + j) += grains.at(i).at(j);
+        if (true) {//i > 150 && i < 153) {
+            if (i < nGrains - 1 && bufPos + grains.at(i).size() < out.size()) {
+                for (int j = 0; j < grains.at(i).size() - 1; ++j) {
+                    auto outPos = i*hopSize + bufPos + j;
+                    if (outPos < out.size()) {
+                        out.at(outPos) += grains.at(i).at(j);
+                    }
+                }
+                bufPos += hopSize;
+                continue;
             }
-            bufPos += hopSize;
-            continue;
+            for (int k = 0; k < out.size() - bufPos - 1; ++k) {
+                out.at(bufPos + k) += grains.at(i).at(k);
+            }
         }
-        for (int k = 0; k < out.size() - bufPos - 1; ++k) {
-            out.at(bufPos + k) += grains.at(i).at(k);
+    }
+}
+
+void pitchShift2(float pitchShiftRatio, long nSamples, float sampleRate, const std::vector<float>& source, std::vector<float>& out)
+{
+    long fftFrameSize = 1024;
+    long osamp = 8;
+    static constexpr const uint32_t maxFrameLength = 8192;
+    static std::vector <double> gInFIFO(maxFrameLength, 0);
+    static std::vector <double> gOutFIFO(maxFrameLength, 0);
+    static std::vector <kiss_fft_cpx> fftData(maxFrameLength);
+    static std::vector <double> gLastPhase(maxFrameLength / 2 + 1, 0);
+    static std::vector <double> gSumPhase(maxFrameLength / 2 + 1, 0);
+    static std::vector <double> gOutputAccum(2 * maxFrameLength, 0);
+    static std::vector <double> gAnaFreq(maxFrameLength, 0);
+    static std::vector <double> gAnaMagn(maxFrameLength, 0);
+    static std::vector <double> gSynFreq(maxFrameLength);
+    static std::vector <double> gSynMagn(maxFrameLength);
+    static long inBufPos = 0;
+    static bool init = 0;
+    double magn, phase, tmp, window, real, imag;
+    double freqPerBin, expct;
+    long i, k, qpd, index, inFifoLatency, stepSize, fftFrameSize2;
+
+    /* set up some handy variables */
+    fftFrameSize2 = fftFrameSize / 2;
+    stepSize = fftFrameSize / osamp;
+    freqPerBin = sampleRate / (double)fftFrameSize;
+    expct = 2.*M_PI*(double)stepSize / (double)fftFrameSize;
+    inFifoLatency = fftFrameSize - stepSize;
+    if (inBufPos == 0) {
+        inBufPos = inFifoLatency;
+    }
+
+    fft_wrapper fft(sampleRate, fftFrameSize);
+
+    /* main processing loop */
+    for (i = 0; i < nSamples; i++) {
+
+        /* As long as we have not yet collected enough data just read in */
+        gInFIFO[inBufPos] = source[i];
+        out[i] = gOutFIFO[inBufPos - inFifoLatency];
+        inBufPos++;
+
+        /* now we have enough data for processing */
+        if (inBufPos >= fftFrameSize) {
+            inBufPos = inFifoLatency;
+
+            for (k = 0; k < fftFrameSize; k++) {
+                window = -.5*cos(2.*M_PI*(double)k / (double)fftFrameSize) + .5;
+                gInFIFO[k] *= window;
+            }
+
+            /* ***************** ANALYSIS ******************* */
+            /* do transform */
+            fft.setData(FFTDirection::In, gInFIFO);
+            fft.computeStft();
+            fftData = fft.getRawOutput();
+
+            //smbFft(gFFTworksp, fftFrameSize, -1);
+
+            /* this is the analysis step */
+            for (k = 0; k <= fftFrameSize2; k++) {
+
+                /* de-interlace FFT buffer */
+                real = fftData[k].r;
+                imag = fftData[k].i;
+
+                /* compute magnitude and phase */
+                magn = 2.*sqrt(real*real + imag*imag);
+                phase = atan2(imag, real);
+
+                /* compute phase difference */
+                tmp = phase - gLastPhase[k];
+                gLastPhase[k] = phase;
+
+                /* subtract expected phase difference */
+                tmp -= (double)k*expct;
+
+                /* map delta phase into +/- Pi interval */
+                qpd = tmp / M_PI;
+                if (qpd >= 0) qpd += qpd & 1;
+                else qpd -= qpd & 1;
+                tmp -= M_PI*(double)qpd;
+
+                /* get deviation from bin frequency from the +/- Pi interval */
+                tmp = osamp*tmp / (2.*M_PI);
+
+                /* compute the k-th partials' true frequency */
+                tmp = (double)k*freqPerBin + tmp*freqPerBin;
+
+                /* store magnitude and true frequency in analysis arrays */
+                gAnaMagn[k] = magn;
+                gAnaFreq[k] = tmp;
+
+            }
+
+            /* ***************** PROCESSING ******************* */
+            /* this does the actual pitch shifting */
+            std::fill_n(gSynMagn.begin(), fftFrameSize, 0);
+            std::fill_n(gSynFreq.begin(), fftFrameSize, 0);
+            for (k = 0; k <= fftFrameSize2; k++) {
+                index = k*pitchShiftRatio;
+                if (index <= fftFrameSize2) {
+                    gSynMagn[index] += gAnaMagn[k];
+                    gSynFreq[index] = gAnaFreq[k] * pitchShiftRatio;
+                }
+            }
+
+            /* ***************** SYNTHESIS ******************* */
+            /* this is the synthesis step */
+            for (k = 0; k <= fftFrameSize2; k++) {
+
+                /* get magnitude and true frequency from synthesis arrays */
+                magn = gSynMagn[k];
+                tmp = gSynFreq[k];
+
+                /* subtract bin mid frequency */
+                tmp -= (double)k*freqPerBin;
+
+                /* get bin deviation from freq deviation */
+                tmp /= freqPerBin;
+
+                /* take osamp into account */
+                tmp = 2.*M_PI*tmp / osamp;
+
+                /* add the overlap phase advance back in */
+                tmp += (double)k*expct;
+
+                /* accumulate delta phase to get bin phase */
+                gSumPhase[k] += tmp;
+                phase = gSumPhase[k];
+
+                /* get real and imag part and re-interleave */
+                fftData[k].r = magn*cos(phase);
+                fftData[k].i = magn*sin(phase);
+            }
+
+            /* zero negative frequencies */
+            /*for (k = fftFrameSize + 2; k < 2 * fftFrameSize; k++) {
+                fftData[k].r = 0.;
+                fftData[k].i = 0.;
+            }*/
+
+            /* do inverse transform */
+            fft.setData(FFTDirection::Out, fftData);
+            fft.computeInverseStft();
+            fftData = fft.getRawOutput();
+            //smbFft(gFFTworksp, fftFrameSize, 1);
+
+            /* do windowing and add to output accumulator */
+            for (k = 0; k < fftFrameSize; k++) {
+                window = -.5 * cos(M_2_PI * (double)k / (double)fftFrameSize) + .5;
+                gOutputAccum[k] += 2. * window * fftData[k].r / (fftFrameSize2*osamp);
+            }
+            for (k = 0; k < stepSize; k++) {
+                gOutFIFO[k] = gOutputAccum[k];
+            }
+
+            /* shift accumulator */
+            std::memmove(&gOutputAccum[0], &gOutputAccum[0] + stepSize, fftFrameSize * sizeof(double));
+
+            /* move input FIFO */
+            for (k = 0; k < inFifoLatency; k++) {
+                gInFIFO[k] = gInFIFO[k + stepSize];
+            }
         }
     }
 }
@@ -714,26 +901,26 @@ int main(int argc, char* argv[])
     std::vector<float> source, out;
 
     DBGOUT("loading file...");
-    auto nSamples = ReadWaveFile("in2.wav", source, numChannels, sampleRate, bytesPerSample);
+    auto nSamples = ReadWaveFile("in.wav", source, numChannels, sampleRate, bytesPerSample);
     if (!nSamples) {
         return 0;
     }
 
     out.resize(nSamples);
     
-    int method = 1;
-    if (method == 0) {
-        smbPitchShift(0.8, nSamples, 1024, 4, sampleRate, &source[0], &out[0]);
-        DBGOUT("saving file...");
-        WriteWaveFile("out0.wav", out, numChannels, sampleRate, bytesPerSample);
-    }
-    else if (method == 1) {
-        pitchShift1(1.8, nSamples, sampleRate, source, out);
-        DBGOUT("saving file...");
-        WriteWaveFile("out1.wav", out, numChannels, sampleRate, bytesPerSample);
-    }
+    smbPitchShift(1.8, nSamples, 1024, 4, sampleRate, &source[0], &out[0]);
+    DBGOUT("saving file...");
+    WriteWaveFile("out0.wav", out, numChannels, sampleRate, bytesPerSample);
 
-    DBGOUT("done.");
+    /*pitchShift1(1.8, nSamples, sampleRate, source, out);
+    DBGOUT("saving file...");
+    WriteWaveFile("out1.wav", out, numChannels, sampleRate, bytesPerSample);*/
+
+    /*pitchShift2(1.8, nSamples, sampleRate, source, out);
+    DBGOUT("saving file...");
+    WriteWaveFile("out2.wav", out, numChannels, sampleRate, bytesPerSample);*/
+
+    ("done.");
 
     //App app(512, 512);
     //app.execute(argc, argv);
