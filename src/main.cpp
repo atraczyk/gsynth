@@ -14,7 +14,7 @@
 
 /****************************************************************************
 *
-* NAME: smbPitchShift.cpp
+* NAME: pitchShift0.cpp
 * VERSION: 1.2
 * HOME URL: http://blogs.zynaptiq.com/bernsee
 * KNOWN BUGS: none
@@ -63,9 +63,9 @@ double smbAtan2(double x, double y);
 // -----------------------------------------------------------------------------------------------------------------
 
 
-void smbPitchShift(float pitchShift, long numSampsToProcess, long fftFrameSize, long osamp, float sampleRate, float *indata, float *outdata)
+void pitchShift0(float pitchShift, long numSampsToProcess, long fftFrameSize, long osamp, float sampleRate, float *indata, float *outdata)
 /*
-Routine smbPitchShift(). See top of file for explanation
+Routine pitchShift0(). See top of file for explanation
 Purpose: doing pitch shifting while maintaining duration using the Short
 Time Fourier Transform.
 Author: (c)1999-2015 Stephan M. Bernsee <s.bernsee [AT] zynaptiq [DOT] com>
@@ -730,19 +730,18 @@ void pitchShift2(float pitchShiftRatio, long nSamples, float sampleRate, const s
 {
     long fftFrameSize = 1024;
     long osamp = 8;
-    static constexpr const uint32_t maxFrameLength = 8192;
-    static std::vector <double> gInFIFO(maxFrameLength, 0);
-    static std::vector <double> gOutFIFO(maxFrameLength, 0);
-    static std::vector <kiss_fft_cpx> fftData(maxFrameLength);
-    static std::vector <double> gLastPhase(maxFrameLength / 2 + 1, 0);
-    static std::vector <double> gSumPhase(maxFrameLength / 2 + 1, 0);
-    static std::vector <double> gOutputAccum(2 * maxFrameLength, 0);
-    static std::vector <double> gAnaFreq(maxFrameLength, 0);
-    static std::vector <double> gAnaMagn(maxFrameLength, 0);
-    static std::vector <double> gSynFreq(maxFrameLength);
-    static std::vector <double> gSynMagn(maxFrameLength);
-    static long inBufPos = 0;
-    static bool init = 0;
+    constexpr const uint32_t maxFrameLength = 8192;
+    std::vector <double> gInFIFO(maxFrameLength, 0);
+    std::vector <double> gOutFIFO(maxFrameLength, 0);
+    std::vector <kiss_fft_cpx> fftData(maxFrameLength, { 0, 0 });
+    std::vector <double> gLastPhase(maxFrameLength / 2 + 1, 0);
+    std::vector <double> gSumPhase(maxFrameLength / 2 + 1, 0);
+    std::vector <double> gOutputAccum(2 * maxFrameLength, 0);
+    std::vector <double> gAnaFreq(maxFrameLength, 0);
+    std::vector <double> gAnaMagn(maxFrameLength, 0);
+    std::vector <double> gSynFreq(maxFrameLength);
+    std::vector <double> gSynMagn(maxFrameLength);
+    long inBufPos = 0;
     double magn, phase, tmp, window, real, imag;
     double freqPerBin, expct;
     long i, k, qpd, index, inFifoLatency, stepSize, fftFrameSize2;
@@ -773,12 +772,13 @@ void pitchShift2(float pitchShiftRatio, long nSamples, float sampleRate, const s
 
             for (k = 0; k < fftFrameSize; k++) {
                 window = -.5*cos(2.*M_PI*(double)k / (double)fftFrameSize) + .5;
-                gInFIFO[k] *= window;
+                fftData[k].r = gInFIFO[k] * window;
+                fftData[k].i = 0.;
             }
 
             /* ***************** ANALYSIS ******************* */
             /* do transform */
-            fft.setData(FFTDirection::In, gInFIFO);
+            fft.setData(FFTDirection::In, fftData);
             fft.computeStft();
             fftData = fft.getRawOutput();
 
@@ -870,7 +870,7 @@ void pitchShift2(float pitchShiftRatio, long nSamples, float sampleRate, const s
             /* do inverse transform */
             fft.setData(FFTDirection::Out, fftData);
             fft.computeInverseStft();
-            fftData = fft.getRawOutput();
+            fftData = fft.getRawInverse();
             //smbFft(gFFTworksp, fftFrameSize, 1);
 
             /* do windowing and add to output accumulator */
@@ -907,18 +907,25 @@ int main(int argc, char* argv[])
     }
 
     out.resize(nSamples);
-    
-    smbPitchShift(1.8, nSamples, 1024, 4, sampleRate, &source[0], &out[0]);
-    DBGOUT("saving file...");
-    WriteWaveFile("out0.wav", out, numChannels, sampleRate, bytesPerSample);
 
-    /*pitchShift1(1.8, nSamples, sampleRate, source, out);
-    DBGOUT("saving file...");
-    WriteWaveFile("out1.wav", out, numChannels, sampleRate, bytesPerSample);*/
-
-    /*pitchShift2(1.8, nSamples, sampleRate, source, out);
-    DBGOUT("saving file...");
-    WriteWaveFile("out2.wav", out, numChannels, sampleRate, bytesPerSample);*/
+    int type = 2;
+    switch (type) {
+    case 0:
+        pitchShift0(1.8, nSamples, 1024, 8, sampleRate, &source[0], &out[0]);
+        DBGOUT("saving file...");
+        WriteWaveFile("out0.wav", out, numChannels, sampleRate, bytesPerSample);
+        break;
+    case 1:
+        pitchShift1(1.8, nSamples, sampleRate, source, out);
+        DBGOUT("saving file...");
+        WriteWaveFile("out1.wav", out, numChannels, sampleRate, bytesPerSample);
+        break;
+    case 2:
+        pitchShift2(1.8, nSamples, sampleRate, source, out);
+        DBGOUT("saving file...");
+        WriteWaveFile("out2.wav", out, numChannels, sampleRate, bytesPerSample);
+        break;
+    }
 
     ("done.");
 

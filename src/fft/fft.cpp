@@ -96,6 +96,12 @@ fft_wrapper::getRawOutput()
     return out_;
 }
 
+std::vector<kiss_fft_cpx>
+fft_wrapper::getRawInverse()
+{
+    return inverse_;
+}
+
 std::vector<double>
 fft_wrapper::computeInverseStft()
 {

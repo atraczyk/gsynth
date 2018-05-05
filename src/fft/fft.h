@@ -32,6 +32,7 @@ public:
                     const std::vector<kiss_fft_cpx>& realData);
     fftDataBlob computeStft();
     std::vector<kiss_fft_cpx> getRawOutput();
+    std::vector<kiss_fft_cpx> getRawInverse();
     std::vector<double> computeInverseStft();
 
     uint32_t getWindowSize() {
