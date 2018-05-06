@@ -729,7 +729,7 @@ void pitchShift1(float pitchShiftRatio, long nSamples, float sampleRate, const s
 void pitchShift2(float pitchShiftRatio, long nSamples, float sampleRate, const std::vector<float>& source, std::vector<float>& out)
 {
     long fftFrameSize = 1024;
-    long osamp = 8;
+    long osamp = 4;
     constexpr const uint32_t maxFrameLength = 8192;
     std::vector <double> gInFIFO(maxFrameLength, 0);
     std::vector <double> gOutFIFO(maxFrameLength, 0);
@@ -778,12 +778,7 @@ void pitchShift2(float pitchShiftRatio, long nSamples, float sampleRate, const s
 
             /* ***************** ANALYSIS ******************* */
             /* do transform */
-            fft.setData(FFTDirection::In, fftData);
-            fft.computeStft();
-            fftData = fft.getRawOutput();
-
-            //smbFft(gFFTworksp, fftFrameSize, -1);
-
+            fft.compute(fftData);
             /* this is the analysis step */
             for (k = 0; k <= fftFrameSize2; k++) {
 
@@ -820,75 +815,71 @@ void pitchShift2(float pitchShiftRatio, long nSamples, float sampleRate, const s
 
             }
 
-            /* ***************** PROCESSING ******************* */
-            /* this does the actual pitch shifting */
-            std::fill_n(gSynMagn.begin(), fftFrameSize, 0);
-            std::fill_n(gSynFreq.begin(), fftFrameSize, 0);
-            for (k = 0; k <= fftFrameSize2; k++) {
-                index = k*pitchShiftRatio;
-                if (index <= fftFrameSize2) {
-                    gSynMagn[index] += gAnaMagn[k];
-                    gSynFreq[index] = gAnaFreq[k] * pitchShiftRatio;
-                }
-            }
+            ///* ***************** PROCESSING ******************* */
+            ///* this does the actual pitch shifting */
+            //std::fill_n(gSynMagn.begin(), fftFrameSize, 0);
+            //std::fill_n(gSynFreq.begin(), fftFrameSize, 0);
+            //for (k = 0; k <= fftFrameSize2; k++) {
+            //    index = k*pitchShiftRatio;
+            //    if (index <= fftFrameSize2) {
+            //        gSynMagn[index] += gAnaMagn[k];
+            //        gSynFreq[index] = gAnaFreq[k] * pitchShiftRatio;
+            //    }
+            //}
 
-            /* ***************** SYNTHESIS ******************* */
-            /* this is the synthesis step */
-            for (k = 0; k <= fftFrameSize2; k++) {
+            ///* ***************** SYNTHESIS ******************* */
+            ///* this is the synthesis step */
+            //for (k = 0; k <= fftFrameSize2; k++) {
 
-                /* get magnitude and true frequency from synthesis arrays */
-                magn = gSynMagn[k];
-                tmp = gSynFreq[k];
+            //    /* get magnitude and true frequency from synthesis arrays */
+            //    magn = gSynMagn[k];
+            //    tmp = gSynFreq[k];
 
-                /* subtract bin mid frequency */
-                tmp -= (double)k*freqPerBin;
+            //    /* subtract bin mid frequency */
+            //    tmp -= (double)k*freqPerBin;
 
-                /* get bin deviation from freq deviation */
-                tmp /= freqPerBin;
+            //    /* get bin deviation from freq deviation */
+            //    tmp /= freqPerBin;
 
-                /* take osamp into account */
-                tmp = 2.*M_PI*tmp / osamp;
+            //    /* take osamp into account */
+            //    tmp = 2.*M_PI*tmp / osamp;
 
-                /* add the overlap phase advance back in */
-                tmp += (double)k*expct;
+            //    /* add the overlap phase advance back in */
+            //    tmp += (double)k*expct;
 
-                /* accumulate delta phase to get bin phase */
-                gSumPhase[k] += tmp;
-                phase = gSumPhase[k];
+            //    /* accumulate delta phase to get bin phase */
+            //    gSumPhase[k] += tmp;
+            //    phase = gSumPhase[k];
 
-                /* get real and imag part and re-interleave */
-                fftData[k].r = magn*cos(phase);
-                fftData[k].i = magn*sin(phase);
-            }
+            //    /* get real and imag part and re-interleave */
+            //    fftData[k].r = magn*cos(phase);
+            //    fftData[k].i = magn*sin(phase);
+            //}
 
-            /* zero negative frequencies */
-            /*for (k = fftFrameSize + 2; k < 2 * fftFrameSize; k++) {
-                fftData[k].r = 0.;
-                fftData[k].i = 0.;
-            }*/
+            ///* zero negative frequencies */
+            //for (k = fftFrameSize / 2; k < fftFrameSize; k++) {
+            //    fftData[k].r = 0.;
+            //    fftData[k].i = 0.;
+            //}
 
-            /* do inverse transform */
-            fft.setData(FFTDirection::Out, fftData);
-            fft.computeInverseStft();
-            fftData = fft.getRawInverse();
-            //smbFft(gFFTworksp, fftFrameSize, 1);
+            ///* do inverse transform */
+            //fft.computeInverse(fftData);
 
-            /* do windowing and add to output accumulator */
-            for (k = 0; k < fftFrameSize; k++) {
-                window = -.5 * cos(M_2_PI * (double)k / (double)fftFrameSize) + .5;
-                gOutputAccum[k] += 2. * window * fftData[k].r / (fftFrameSize2*osamp);
-            }
-            for (k = 0; k < stepSize; k++) {
-                gOutFIFO[k] = gOutputAccum[k];
-            }
+            ///* do windowing and add to output accumulator */
+            //double crossfadeSize = fftFrameSize - stepSize;
+            //for (k = 0; k < fftFrameSize; k++) {
+            //    window = -.5 * cos(M_2_PI * (double)k / (double)fftFrameSize) + .5;
+            //    gOutputAccum[k] += 2. * window * fftData[k].r / (fftFrameSize2*osamp);
+            //}
+            //for (k = 0; k < stepSize; k++) {
+            //    gOutFIFO[k] = gOutputAccum[k];
+            //}
 
-            /* shift accumulator */
-            std::memmove(&gOutputAccum[0], &gOutputAccum[0] + stepSize, fftFrameSize * sizeof(double));
+            ///* shift accumulator */
+            //std::memmove(&gOutputAccum[0], &gOutputAccum[0] + stepSize, fftFrameSize * sizeof(double));
 
-            /* move input FIFO */
-            for (k = 0; k < inFifoLatency; k++) {
-                gInFIFO[k] = gInFIFO[k + stepSize];
-            }
+            ///* move input FIFO */
+            //std::rotate(gInFIFO.begin(), gInFIFO.begin() + stepSize, gInFIFO.end());
         }
     }
 }
@@ -908,10 +899,12 @@ int main(int argc, char* argv[])
 
     out.resize(nSamples);
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     int type = 2;
     switch (type) {
     case 0:
-        pitchShift0(1.8, nSamples, 1024, 8, sampleRate, &source[0], &out[0]);
+        pitchShift0(1.8, nSamples, 1024, 4, sampleRate, &source[0], &out[0]);
         DBGOUT("saving file...");
         WriteWaveFile("out0.wav", out, numChannels, sampleRate, bytesPerSample);
         break;
@@ -927,13 +920,17 @@ int main(int argc, char* argv[])
         break;
     }
 
+    auto finish = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = finish - start;
+    std::cout << "Elapsed time: " << elapsed.count() << " s\n";
+
     ("done.");
 
     //App app(512, 512);
     //app.execute(argc, argv);
 
 #ifdef _WIN32
-    //system("pause");
+    system("pause");
 #endif
     return 0;
 }

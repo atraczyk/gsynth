@@ -35,6 +35,9 @@ public:
     std::vector<kiss_fft_cpx> getRawInverse();
     std::vector<double> computeInverseStft();
 
+    void compute(std::vector<kiss_fft_cpx>& data);
+    void computeInverse(std::vector<kiss_fft_cpx>& data);
+
     uint32_t getWindowSize() {
         return windowSize_;
     }

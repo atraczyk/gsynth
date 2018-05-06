@@ -112,3 +112,15 @@ fft_wrapper::computeInverseStft()
     }
     return dataBlob;
 }
+
+void
+fft_wrapper::compute(std::vector<kiss_fft_cpx>& data)
+{
+    kiss_fft(cfg_, &data[0], &data[0]);
+}
+
+void
+fft_wrapper::computeInverse(std::vector<kiss_fft_cpx>& data)
+{
+    kiss_fft(inverse_cfg_, &data[0], &data[0]);
+}
