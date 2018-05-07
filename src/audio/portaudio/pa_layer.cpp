@@ -154,7 +154,7 @@ PortAudioLayer::PortAudioLayerImpl::PortAudioLayerImpl(PortAudioLayer& parent)
     , indexOut_(paNoDevice)
     , inputBuffer_(std::make_shared<RingBuffer>())
     , processedBuffer_(std::make_shared<RingBuffer>())
-    , fft_(parent.audioFormat_.sample_rate, parent.audioFormat_.sample_rate * 0.05)
+    , fft_(parent.audioFormat_.sample_rate * 0.05)
     , canPlay_(false)
     , outFrame_(0)
     , inFrame_(0)
@@ -499,13 +499,13 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
             data.emplace_back(static_cast<double>(windowMult * value));
             ++i;
         }
-        fft_.setData(FFTDirection::In, data);
+        /*fft_.setData(FFTDirection::In, data);
         {
             std::lock_guard<std::mutex> lk(fftDataMutex_);
             currentFftData_ = fft_.computeStft();
             if (SYNTHTYPE == SynthType::ifft) {
                 currentFftInverse_ = fft_.computeInverseStft();
             }
-        }
+        }*/
     }
 }

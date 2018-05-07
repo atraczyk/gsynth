@@ -43,6 +43,9 @@
     <ClCompile Include="src\audio\soundfile.cpp">
       <Filter>Source Files\audio</Filter>
     </ClCompile>
+    <ClCompile Include="src\pitchshift.cpp">
+      <Filter>Source Files\audio</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Log.hpp">
@@ -76,6 +79,9 @@
       <Filter>Source Files\audio</Filter>
     </ClInclude>
     <ClInclude Include="src\audio\ringbuffer.h">
+      <Filter>Source Files\audio</Filter>
+    </ClInclude>
+    <ClInclude Include="src\pitchshift.h">
       <Filter>Source Files\audio</Filter>
     </ClInclude>
   </ItemGroup>

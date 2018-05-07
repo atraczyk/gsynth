@@ -5,10 +5,13 @@
 #include "Log.hpp"
 #include "kiss_fft.h"
 
+#define FFT_R(a, i) *(((kiss_fft_scalar*)&a) + (i << 1))
+#define FFT_I(a, i) *(((kiss_fft_scalar*)&a) + (i << 1) + 1)
+
 struct fftData {
-    double frequency;
-    double amplitude;
-    double phase;
+    float frequency;
+    float amplitude;
+    float phase;
 };
 using fftDataBlob = std::vector<fftData>;
 
@@ -21,22 +24,13 @@ class fft_wrapper
 {
 public:
     fft_wrapper();
-    fft_wrapper(uint32_t sampleRate, uint32_t windowSize);
+    fft_wrapper(uint32_t windowSize);
     ~fft_wrapper();
 
-    void init(uint32_t sampleRate, uint32_t windowSize);
-    void setData(   FFTDirection direction,
-                    const std::vector<double>& realData,
-                    const std::vector<double>& imagData = std::vector<double>());
-    void setData(   FFTDirection direction,
-                    const std::vector<kiss_fft_cpx>& realData);
-    fftDataBlob computeStft();
-    std::vector<kiss_fft_cpx> getRawOutput();
-    std::vector<kiss_fft_cpx> getRawInverse();
-    std::vector<double> computeInverseStft();
+    void init(uint32_t windowSize);
 
-    void compute(std::vector<kiss_fft_cpx>& data);
-    void computeInverse(std::vector<kiss_fft_cpx>& data);
+    void computeA(kiss_fft_cpx* data, size_t frameSize = 0);
+    void computeInverseA(kiss_fft_cpx* data, size_t frameSize = 0);
 
     uint32_t getWindowSize() {
         return windowSize_;

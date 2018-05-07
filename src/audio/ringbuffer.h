@@ -5,7 +5,7 @@
 #include <cinttypes>
 
 using AudioSample = int16_t;
-static constexpr size_t SIZEBUF = 16000;
+static constexpr size_t maxBufLength = 4096;
 
 template<typename T>
 class lock_free_queue
@@ -30,8 +30,8 @@ private:
     std::atomic<size_t> write_;
     std::atomic<size_t> read_;
 
-    size_t capacity_ = SIZEBUF;
-    T buffer_[SIZEBUF];
+    size_t capacity_ = maxBufLength;
+    T buffer_[maxBufLength];
 };
 
 template<typename T>

@@ -159,6 +159,7 @@
     <ClCompile Include="src\fft\kiss_fft\kiss_fft.c" />
     <ClCompile Include="src\filter.cpp" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\pitchshift.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\app.h" />
@@ -172,6 +173,7 @@
     <ClInclude Include="src\fft\kiss_fft\kiss_fft_guts.h" />
     <ClInclude Include="src\filter.h" />
     <ClInclude Include="src\Log.hpp" />
+    <ClInclude Include="src\pitchshift.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

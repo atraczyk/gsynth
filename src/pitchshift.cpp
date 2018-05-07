@@ -1,54 +1,143 @@
-#include <cstdlib>
-#include <cstdio>
-#include <cmath>
-#include <algorithm>
-#include <memory>
-
-#include "app.h"
-#include "pa_layer.h"
-#include "soundfile.h"
-#include "filter.h"
-#include "Log.hpp"
-#include "common.h"
-
-#include "fft.h"
 #include "pitchshift.h"
+#include "common.h"
+#include "Log.hpp"
 
-void pitchShift(    float pitchShiftRatio,
-                    uint32_t grainSize_,
-                    fft_wrapper& fft_,
-                    long overlappingSamples,
-                    long nSamples,
-                    float sampleRate,
-                    float* source,
-                    float* out)
+PitchShifter::PitchShifter()
 {
-    constexpr const uint32_t maxFrameLength = 8192;
-    std::array<float, maxFrameLength> srcRingBuffer_{};
-    std::array<float, maxFrameLength> dstRingBuffer_{};
-    std::array<kiss_fft_cpx, maxFrameLength> fftData_{};
-    std::array<float, maxFrameLength / 2 + 1> lastPhase_{};
-    std::array<float, maxFrameLength / 2 + 1> sumPhase_{};
-    std::array<float, 2 * maxFrameLength> outputAccum_{};
-    std::array<float, maxFrameLength> analysisFrq_{};
-    std::array<float, maxFrameLength> analysisMag_{};
-    std::array<float, maxFrameLength> synthesisFrq_{};
-    std::array<float, maxFrameLength> synthesisMag_{};
-    long inBufPos = 0;
-    double magnitude, phase, tmp, window, real=0, imag=0;
-    double freqPerBin, expectedFreq;
-    long qpd, index, latency, stepSize, fftFrameSize2;
-    int i, k;
+}
 
-    /* set up some handy variables */
+PitchShifter::PitchShifter(const uint32_t& sampleRate, const uint32_t& grainSize, const uint32_t& overlap)
+    : grainSize_(grainSize)
+    , sampleRate_(sampleRate)
+    , overlap_(overlap)
+    , fft_(grainSize)
+{
+}
+
+PitchShifter::~PitchShifter()
+{
+}
+
+void
+PitchShifter::pitchShift(
+    float pitchShiftRatio,
+    long nSamples,
+    float* source,
+    float* out)
+{
+    this->pitchShift(pitchShiftRatio, grainSize_ , overlap_, nSamples, sampleRate_, source, out);
+}
+
+void
+PitchShifter::pitchShift(
+    float pitchShiftRatio,
+    uint32_t grainSize_,
+    long overlappingSamples,
+    long nSamples,
+    float sampleRate,
+    float* source,
+    float* out)
+{
+    static long inBufPos = 0;
+    static float magnitude;
+    static float phase;
+    static float tmp;
+    static float window;
+    static float real = 0;
+    static float imag = 0;
+    static float freqPerBin;
+    static float expectedFreq;
+    static long qpd;
+    static long index;
+    static long latency;
+    static long stepSize;
+    static long fftFrameSize2;
+    static int i, k;
+
     fftFrameSize2 = grainSize_ / 2;
-    stepSize = grainSize_ / overlappingSamples;
+    stepSize = grainSize_ / overlap_;
     freqPerBin = sampleRate / (double)grainSize_;
-    expectedFreq = 2.*M_PI*(double)stepSize / (double)grainSize_;
+    expectedFreq = M_2_PI * (double)stepSize / (double)grainSize_;
     latency = grainSize_ - stepSize;
     if (inBufPos == 0) {
         inBufPos = latency;
     }
+
+    //////////////////////
+    /*      TESTING     */
+    //////////////////////
+    /* simulate buffers */
+    std::vector<float> sourceVec{ source, source + nSamples };
+    uint32_t bufSize = 2048;
+    uint16_t grainsPerBuf = static_cast<float>(bufSize) / stepSize;
+    auto nBuffers = static_cast<int>(ceil(static_cast<float>(nSamples) / bufSize));
+    auto nGrains = grainsPerBuf * nBuffers;
+    std::vector<std::vector<float>> buffers(nBuffers, std::vector<float>());
+    std::vector<std::vector<float>> grains(nGrains);
+    bool running = true;
+    std::mutex processMutex, outputMutex;
+    std::condition_variable processCv, outputCv;
+    DBGOUT("samples: %d, buffers: %d, grains: %d", nSamples, nBuffers, nGrains);
+
+    DBGOUT("serializing to buffers...");
+    for (int i = 0; i < nBuffers; ++i) {
+        size_t fromPos = i * bufSize;
+        size_t toPos = (i < nBuffers - 1) ? i * bufSize + bufSize : i * bufSize + (nSamples - (i * bufSize));
+        auto from = sourceVec.begin() + fromPos;
+        auto to = sourceVec.begin() + toPos;
+        std::copy_n(
+            sourceVec.begin() + fromPos,
+            toPos - fromPos,
+            std::back_inserter(buffers.at(i))
+        );
+    }
+
+    std::thread inputCb([&]() {
+        for (int i = 0; i < nBuffers; ++i) {
+            DBGOUT("simulating input buffer: %d", i);
+            auto thisBufSize = buffers[i].size();
+            for (int j = 0; j < thisBufSize; ++j) {
+                //srcRingBuffer_[inBufPos] = buffers[i][j];
+                //out[j] = dstRingBuffer_[inBufPos - latency];
+                inBufPos++;
+                processCv.notify_all();
+                //DBGOUT("notify processing - bufPos: %d", inBufPos);
+            }
+        }
+        running = false;
+    });
+
+    std::thread processCb([&]() {
+        while (running) {
+            std::unique_lock<std::mutex> lk(processMutex);
+            processCv.wait(lk, [this, &grainSize_, &running] {
+                return (inBufPos >= grainSize_) || !running;
+            });
+            if (!running) { return; }
+            inBufPos = latency;
+            DBGOUT("simulating processing - bufPos: %d", inBufPos);
+            outputCv.notify_all();
+        }
+    });
+
+    std::thread outputCb([&]() {
+        while (running) {
+            std::unique_lock<std::mutex> lk(outputMutex);
+            outputCv.wait(lk, [this, &running] {
+                return true || !running;
+            });
+            if (!running) { return; }
+            DBGOUT("simulating output...");
+        }
+    });
+
+    inputCb.join();
+    processCb.join();
+    outputCb.join();
+
+    //////////////////////
+    /*      !TESTING    */
+    //////////////////////
 
     /* main processing loop */
     for (i = 0; i < nSamples; i++) {
@@ -86,16 +175,16 @@ void pitchShift(    float pitchShiftRatio,
                 lastPhase_[k] = phase;
 
                 /* subtract expected phase difference */
-                tmp -= (double)k*expectedFreq;
+                tmp -= (double)k * expectedFreq;
 
                 /* map delta phase into +/- Pi interval */
                 qpd = tmp / M_PI;
                 if (qpd >= 0) qpd += qpd & 1;
                 else qpd -= qpd & 1;
-                tmp -= M_PI*(double)qpd;
+                tmp -= M_PI * (double)qpd;
 
                 /* get deviation from bin frequency from the +/- Pi interval */
-                tmp = overlappingSamples*tmp / (M_2_PI);
+                tmp = overlappingSamples * tmp / (M_2_PI);
 
                 /* compute the k-th partials' true frequency */
                 tmp = (double)k*freqPerBin + tmp*freqPerBin;
@@ -160,7 +249,7 @@ void pitchShift(    float pitchShiftRatio,
             double crossfadeSize = grainSize_ - stepSize;
             for (k = 0; k < grainSize_; k++) {
                 window = -.5 * cos(M_2_PI * (double)k / (double)grainSize_) + .5;
-                outputAccum_[k] += 2. * window * FFT_R(fftData_, k) / (fftFrameSize2 * overlappingSamples);
+                outputAccum_[k] += 2. * window * FFT_R(fftData_, k) / (fftFrameSize2 * overlap_);
             }
             for (k = 0; k < stepSize; k++) {
                 dstRingBuffer_[k] = outputAccum_[k];
@@ -175,44 +264,4 @@ void pitchShift(    float pitchShiftRatio,
             }
         }
     }
-}
-
-int main(int argc, char* argv[])
-{
-    uint16_t numChannels;
-    uint32_t sampleRate;
-    uint16_t bytesPerSample;
-    std::vector<float> source, out;
-
-    DBGOUT("loading file...");
-    auto nSamples = ReadWaveFile("in.wav", source, numChannels, sampleRate, bytesPerSample);
-    if (!nSamples) {
-        return 0;
-    }
-
-    uint32_t frameSize = 1024;
-    out.resize(nSamples);
-    fft_wrapper fft_(frameSize);
-
-    PitchShifter pitchShifter(sampleRate, frameSize, 4);
-
-    std::chrono::time_point<std::chrono::steady_clock> start;
-    auto pitchShiftRatio = 1.0;
-
-    start = std::chrono::high_resolution_clock::now();
-    pitchShifter.pitchShift(pitchShiftRatio, nSamples, &source[0], &out[0]);
-    //pitchShift(pitchShiftRatio, 4, fft_, frameSize, nSamples, sampleRate, &source[0], &out[0]);
-    DBGOUT("saving file...");
-    WriteWaveFile("out2.wav", out, numChannels, sampleRate, bytesPerSample);
-    std::cout << "Elapsed time: " << std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count() << " s\n";
-
-    ("done.");
-
-    //App app(512, 512);
-    //app.execute(argc, argv);
-
-#ifdef _WIN32
-    system("pause");
-#endif
-    return 0;
 }

@@ -8,9 +8,11 @@ fft_wrapper::fft_wrapper()
 {
 }
 
-fft_wrapper::fft_wrapper(uint32_t sampleRate, uint32_t windowSize)
+fft_wrapper::fft_wrapper(uint32_t windowSize)
+    : cfg_(nullptr)
+    , inverse_cfg_(nullptr)
 {
-    init(sampleRate, windowSize);
+    init(windowSize);
 }
 
 fft_wrapper::~fft_wrapper()
@@ -18,109 +20,41 @@ fft_wrapper::~fft_wrapper()
     if (cfg_) {
         free(cfg_);
     }
+    if (inverse_cfg_) {
+        free(inverse_cfg_);
+    }
 }
 
-void fft_wrapper::init(uint32_t sampleRate, uint32_t windowSize)
+void
+fft_wrapper::init(uint32_t windowSize)
 {
-    sampleRate_ = sampleRate;
     windowSize_ = windowSize;
-    in_.resize(windowSize_);
-    out_.resize(windowSize_);
-    inverse_.resize(windowSize_);
-    cfg_ = kiss_fft_alloc(windowSize_, false, NULL, NULL);
-    inverse_cfg_ = kiss_fft_alloc(windowSize_, true, NULL, NULL);
+    if (cfg_) {
+        free(cfg_);
+    }
+    if (inverse_cfg_) {
+        free(inverse_cfg_);
+    }
+    cfg_ = kiss_fft_alloc(windowSize_, false, nullptr, nullptr);
+    inverse_cfg_ = kiss_fft_alloc(windowSize_, true, nullptr, nullptr);
 }
 
 void
-fft_wrapper::setData(   FFTDirection direction,
-                        const std::vector<double>& realData,
-                        const std::vector<double>& imagData)
+fft_wrapper::computeA(kiss_fft_cpx* data, size_t frameSize)
 {
-    auto& data = direction == FFTDirection::In ? in_ : out_;
-    for (unsigned i = 0; i < windowSize_; i++) {
-        data[i].r = !realData.empty() ? realData[i] : 0;
-        data[i].i = !imagData.empty() ? imagData[i] : 0;
+    if (frameSize && cfg_ && frameSize != windowSize_) {
+        free(cfg_);
+        cfg_ = kiss_fft_alloc(windowSize_, false, nullptr, nullptr);
     }
-}
-
-void 
-fft_wrapper::setData(   FFTDirection direction,
-                        const std::vector<kiss_fft_cpx>& cpxData)
-{
-    auto& data = direction == FFTDirection::In ? in_ : out_;
-    for (unsigned i = 0; i < windowSize_; i++) {
-        data[i] = cpxData[i];
-    }
-}
-
-fftDataBlob
-fft_wrapper::computeStft()
-{
-    fftDataBlob dataBlob;
-
-    kiss_fft(cfg_, &in_[0], &out_[0]);
-
-    auto magWindowSize = windowSize_ / 2;
-    double freqPerBin = sampleRate_ / windowSize_;
-    double frequency, amplitude, phase;
-    double threshold = 0.001; // -60.0; -60dB
-
-    for (uint32_t i = 0; i < windowSize_; i++) {
-        amplitude = sqrt(
-            static_cast<double>(out_[i].r * out_[i].r) +
-            static_cast<double>(out_[i].i * out_[i].i)
-        );
-        frequency = i * freqPerBin;
-        phase = atan2(static_cast<double>(out_[i].i), static_cast<double>(out_[i].r));
-        dataBlob.emplace_back(fftData{ frequency, amplitude, phase });
-    }
-
-    if (SYNTHTYPE == SynthType::resynth) {
-        // limit bands?
-        auto bandLimit = 64;
-        if (bandLimit) {
-            // sort by amplitude first
-            std::sort(dataBlob.begin(), dataBlob.end(), [](fftData a, fftData b) {
-                return a.amplitude > b.amplitude;
-            });
-            dataBlob.resize(bandLimit);
-        }
-    } 
-
-    return dataBlob;
-}
-
-std::vector<kiss_fft_cpx>
-fft_wrapper::getRawOutput()
-{
-    return out_;
-}
-
-std::vector<kiss_fft_cpx>
-fft_wrapper::getRawInverse()
-{
-    return inverse_;
-}
-
-std::vector<double>
-fft_wrapper::computeInverseStft()
-{
-    std::vector<double> dataBlob;
-    kiss_fft(inverse_cfg_, &out_[0], &inverse_[0]);
-    for (const auto& bin : inverse_) {
-        dataBlob.emplace_back(bin.r / (1 * windowSize_));
-    }
-    return dataBlob;
-}
-
-void
-fft_wrapper::compute(std::vector<kiss_fft_cpx>& data)
-{
     kiss_fft(cfg_, &data[0], &data[0]);
 }
 
 void
-fft_wrapper::computeInverse(std::vector<kiss_fft_cpx>& data)
+fft_wrapper::computeInverseA(kiss_fft_cpx* data, size_t frameSize)
 {
+    if (frameSize && inverse_cfg_ && frameSize != windowSize_) {
+        free(inverse_cfg_);
+        inverse_cfg_ = kiss_fft_alloc(windowSize_, true, nullptr, nullptr);
+    }
     kiss_fft(inverse_cfg_, &data[0], &data[0]);
 }

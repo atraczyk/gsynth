@@ -58,14 +58,14 @@ void App::render()
     glBegin(GL_LINES);
 
     bool linearPlot = false;
-    double h;
+    float h;
     auto barSize = 2.0f / _fftDataBlob.size();
     for (int i = 0; i < _fftDataBlob.size(); i++) {
         if (linearPlot) {
             h = _fftDataBlob.at(i).amplitude * 2.0f;
         } else {
             auto dB = 20 * log10(_fftDataBlob.at(i).amplitude);
-            h = (1.0f - std::min(1.0, dB / -60.0f)) * 2.0f;
+            h = (1.0f - std::min(1.0f, dB / -60.0f)) * 2.0f;
         }
         auto x = -1.0f + barSize + barSize * i;
         glVertex3f(x, -1.0f, 0.0f);
