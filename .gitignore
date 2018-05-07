@@ -249,3 +249,4 @@ portaudio/
 !src/audio/portaudio/
 SDL2*/
 gsynth
+*out*.wav
