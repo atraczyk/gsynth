@@ -31,8 +31,8 @@ PitchShifter::pitchShift(
 void
 PitchShifter::pitchShift(
     float pitchShiftRatio,
-    uint32_t grainSize_,
-    long overlappingSamples,
+    uint32_t grainSize,
+    long overlap,
     long nSamples,
     float sampleRate,
     float* source,
@@ -54,105 +54,30 @@ PitchShifter::pitchShift(
     static long fftFrameSize2;
     static int i, k;
 
-    fftFrameSize2 = grainSize_ / 2;
-    stepSize = grainSize_ / overlap_;
-    freqPerBin = sampleRate / (double)grainSize_;
-    expectedFreq = M_2_PI * (double)stepSize / (double)grainSize_;
-    latency = grainSize_ - stepSize;
+    grainSize_ = grainSize;
+    fftFrameSize2 = grainSize / 2;
+    stepSize = grainSize_ / overlap;
+    freqPerBin = sampleRate / (double)grainSize;
+    expectedFreq = M_2_PI * (double)stepSize / (double)grainSize;
+    latency = grainSize - stepSize;
     if (inBufPos == 0) {
         inBufPos = latency;
     }
 
-    //////////////////////
-    /*      TESTING     */
-    //////////////////////
-    /* simulate buffers */
-    std::vector<float> sourceVec{ source, source + nSamples };
-    uint32_t bufSize = 2048;
-    uint16_t grainsPerBuf = static_cast<float>(bufSize) / stepSize;
-    auto nBuffers = static_cast<int>(ceil(static_cast<float>(nSamples) / bufSize));
-    auto nGrains = grainsPerBuf * nBuffers;
-    std::vector<std::vector<float>> buffers(nBuffers, std::vector<float>());
-    std::vector<std::vector<float>> grains(nGrains);
-    bool running = true;
-    std::mutex processMutex, outputMutex;
-    std::condition_variable processCv, outputCv;
-    DBGOUT("samples: %d, buffers: %d, grains: %d", nSamples, nBuffers, nGrains);
-
-    DBGOUT("serializing to buffers...");
-    for (int i = 0; i < nBuffers; ++i) {
-        size_t fromPos = i * bufSize;
-        size_t toPos = (i < nBuffers - 1) ? i * bufSize + bufSize : i * bufSize + (nSamples - (i * bufSize));
-        auto from = sourceVec.begin() + fromPos;
-        auto to = sourceVec.begin() + toPos;
-        std::copy_n(
-            sourceVec.begin() + fromPos,
-            toPos - fromPos,
-            std::back_inserter(buffers.at(i))
-        );
-    }
-
-    std::thread inputCb([&]() {
-        for (int i = 0; i < nBuffers; ++i) {
-            DBGOUT("simulating input buffer: %d", i);
-            auto thisBufSize = buffers[i].size();
-            for (int j = 0; j < thisBufSize; ++j) {
-                //srcRingBuffer_[inBufPos] = buffers[i][j];
-                //out[j] = dstRingBuffer_[inBufPos - latency];
-                inBufPos++;
-                processCv.notify_all();
-                //DBGOUT("notify processing - bufPos: %d", inBufPos);
-            }
-        }
-        running = false;
-    });
-
-    std::thread processCb([&]() {
-        while (running) {
-            std::unique_lock<std::mutex> lk(processMutex);
-            processCv.wait(lk, [this, &grainSize_, &running] {
-                return (inBufPos >= grainSize_) || !running;
-            });
-            if (!running) { return; }
-            inBufPos = latency;
-            DBGOUT("simulating processing - bufPos: %d", inBufPos);
-            outputCv.notify_all();
-        }
-    });
-
-    std::thread outputCb([&]() {
-        while (running) {
-            std::unique_lock<std::mutex> lk(outputMutex);
-            outputCv.wait(lk, [this, &running] {
-                return true || !running;
-            });
-            if (!running) { return; }
-            DBGOUT("simulating output...");
-        }
-    });
-
-    inputCb.join();
-    processCb.join();
-    outputCb.join();
-
-    //////////////////////
-    /*      !TESTING    */
-    //////////////////////
-
     /* main processing loop */
     for (i = 0; i < nSamples; i++) {
         /* As long as we have not yet collected enough data just read in */
-        srcRingBuffer_[inBufPos] = source[i];
-        out[i] = dstRingBuffer_[inBufPos - latency];
+        srcBuffer_[inBufPos] = source[i];
+        out[i] = dstBuffer_[inBufPos - latency];
         inBufPos++;
 
         /* now we have enough data for processing */
-        if (inBufPos >= grainSize_) {
+        if (inBufPos >= grainSize) {
             inBufPos = latency;
 
-            for (k = 0; k < grainSize_; k++) {
-                window = -.5*cos(M_2_PI * (double)k / (double)grainSize_) + .5;
-                FFT_R(fftData_, k) = srcRingBuffer_[k] * window;
+            for (k = 0; k < grainSize; k++) {
+                window = -.5*cos(M_2_PI * (double)k / (double)grainSize) + .5;
+                FFT_R(fftData_, k) = srcBuffer_[k] * window;
                 FFT_I(fftData_, k) = 0.;
             }
 
@@ -184,7 +109,7 @@ PitchShifter::pitchShift(
                 tmp -= M_PI * (double)qpd;
 
                 /* get deviation from bin frequency from the +/- Pi interval */
-                tmp = overlappingSamples * tmp / (M_2_PI);
+                tmp = overlap * tmp / (M_2_PI);
 
                 /* compute the k-th partials' true frequency */
                 tmp = (double)k*freqPerBin + tmp*freqPerBin;
@@ -197,12 +122,12 @@ PitchShifter::pitchShift(
 
             /* ***************** PROCESSING ******************* */
             /* this does the actual pitch shifting */
-            memset(&synthesisMag_, 0, grainSize_ * sizeof(float));
-            memset(&synthesisFrq_, 0, grainSize_ * sizeof(float));
+            memset(&synthesisMag_, 0, grainSize * sizeof(float));
+            memset(&synthesisFrq_, 0, grainSize * sizeof(float));
             for (k = 0; k <= fftFrameSize2; k++) {
                 index = k*pitchShiftRatio;
                 if (index <= fftFrameSize2) {
-                    synthesisMag_[index] += analysisMag_[k];
+                    synthesisMag_[index] = analysisMag_[k];
                     synthesisFrq_[index] = analysisFrq_[k] * pitchShiftRatio;
                 }
             }
@@ -222,7 +147,7 @@ PitchShifter::pitchShift(
                 tmp /= freqPerBin;
 
                 /* take overlappingSamples into account */
-                tmp = M_2_PI * tmp / overlappingSamples;
+                tmp = M_2_PI * tmp / overlap;
 
                 /* add the overlap phase advance back in */
                 tmp += (double)k*expectedFreq;
@@ -237,7 +162,7 @@ PitchShifter::pitchShift(
             }
 
             /* zero negative frequencies */
-            for (k = grainSize_ / 2; k < grainSize_; k++) {
+            for (k = grainSize / 2; k < grainSize; k++) {
                 FFT_R(fftData_, k) = 0;
                 FFT_I(fftData_, k) = 0;
             }
@@ -246,21 +171,21 @@ PitchShifter::pitchShift(
             fft_.computeInverseA(&fftData_[0]);
 
             /* do windowing and add to output accumulator */
-            double crossfadeSize = grainSize_ - stepSize;
-            for (k = 0; k < grainSize_; k++) {
-                window = -.5 * cos(M_2_PI * (double)k / (double)grainSize_) + .5;
-                outputAccum_[k] += 2. * window * FFT_R(fftData_, k) / (fftFrameSize2 * overlap_);
+            double crossfadeSize = grainSize - stepSize;
+            for (k = 0; k < grainSize; k++) {
+                window = -.5 * cos(M_2_PI * (double)k / (double)grainSize) + .5;
+                outputAccum_[k] += 2. * window * FFT_R(fftData_, k) / (fftFrameSize2 * overlap);
             }
             for (k = 0; k < stepSize; k++) {
-                dstRingBuffer_[k] = outputAccum_[k];
+                dstBuffer_[k] = outputAccum_[k];
             }
 
             /* shift accumulator */
-            std::memmove(&outputAccum_[0], &outputAccum_[0] + stepSize, grainSize_ * sizeof(double));
+            std::memmove(&outputAccum_[0], &outputAccum_[0] + stepSize, grainSize * sizeof(double));
 
             /* move input FIFO */
             for (k = 0; k < latency; k++) {
-                srcRingBuffer_[k] = srcRingBuffer_[k + stepSize];
+                srcBuffer_[k] = srcBuffer_[k + stepSize];
             }
         }
     }

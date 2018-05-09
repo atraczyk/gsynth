@@ -4,6 +4,7 @@
 #include "Log.hpp"
 #include "filter.h"
 #include "soundfile.h"
+#include "pitchshift.h"
 #include "common.h"
 
 #include <portaudio.h>
@@ -22,6 +23,8 @@ enum Direction {
     End = 2
 };
 
+using ringbuffer = lock_free_queue<AudioSample>;
+
 struct PortAudioLayer::PortAudioLayerImpl
 {
     PortAudioLayerImpl(PortAudioLayer&);
@@ -39,8 +42,8 @@ struct PortAudioLayer::PortAudioLayerImpl
     PaDeviceIndex indexIn_;
     PaDeviceIndex indexOut_;
 
-    std::shared_ptr<RingBuffer> inputBuffer_;
-    std::shared_ptr<RingBuffer> processedBuffer_;
+    std::shared_ptr<ringbuffer> inputBuffer_;
+    std::shared_ptr<ringbuffer> processedBuffer_;
 
     fft_wrapper fft_;
     std::thread fftThread_;
@@ -53,10 +56,13 @@ struct PortAudioLayer::PortAudioLayerImpl
 
     LowPassFilter lpFilter;
 
+    PitchShifter pitchShifter;
+
     uint64_t outFrame_;
     uint64_t inFrame_;
+    uint64_t inBufPos = 0;
     
-    double pitchShift_ = 0;
+    float pitchShift_ = 1.0;
 
     std::vector<float> out_;
 
@@ -152,9 +158,10 @@ PortAudioLayer::setPitchShift(double pitchShift)
 PortAudioLayer::PortAudioLayerImpl::PortAudioLayerImpl(PortAudioLayer& parent)
     : indexIn_(paNoDevice)
     , indexOut_(paNoDevice)
-    , inputBuffer_(std::make_shared<RingBuffer>())
-    , processedBuffer_(std::make_shared<RingBuffer>())
-    , fft_(parent.audioFormat_.sample_rate * 0.05)
+    , inputBuffer_(std::make_shared<ringbuffer>())
+    , processedBuffer_(std::make_shared<ringbuffer>())
+    , fft_(1024)
+    , pitchShifter(parent.audioFormat_.sample_rate, 1024, 8.0)
     , canPlay_(false)
     , outFrame_(0)
     , inFrame_(0)
@@ -196,124 +203,6 @@ PortAudioLayer::PortAudioLayerImpl::getDeviceByType(bool playback) const
         }
     }
     return ret;
-}
-
-int
-PortAudioLayer::PortAudioLayerImpl::paOutputCallback(   PortAudioLayer& parentLayer,
-                                                        const AudioSample* inputBuffer,
-                                                        AudioSample* outputBuffer,
-                                                        unsigned long framesPerBuffer,
-                                                        const PaStreamCallbackTimeInfo* timeInfo,
-                                                        PaStreamCallbackFlags statusFlags)
-{
-    // unused arguments
-    (void)inputBuffer;
-    (void)timeInfo;
-    (void)statusFlags;
-    (void)inputBuffer;
-
-    if (framesPerBuffer == 0) {
-        DBGOUT("No frames for output.");
-        return paContinue;
-    }
-
-    auto startOutFrame = outFrame_;
-    auto endOutFrame = outFrame_ + framesPerBuffer;
-    AudioSample *out = (AudioSample*)outputBuffer;
-
-    auto readyBufSize = processedBuffer_.get()->getBufSize();
-    //DBGOUT("readyBufSize: %d", readyBufSize);
-    
-    // avoid buffer underrun at start
-    if (readyBufSize >= framesPerBuffer * 2) {
-        canPlay_ = true;
-    }
-
-    if (readyBufSize >= framesPerBuffer && canPlay_) {
-        auto _fftDataBlob = parentLayer.getFftData();
-        auto elapsedTimePerFrame = 1.0 / static_cast<double>(parentLayer.audioFormat_.sample_rate);
-        for (; outFrame_ < endOutFrame; outFrame_++) {
-            auto t = (outFrame_)* elapsedTimePerFrame;
-            AudioSample processed;
-            processedBuffer_.get()->try_pop(processed);
-
-            double value = 0.0;
-            if (SYNTHTYPE == SynthType::resynth) {
-                auto fMult = (1.0 + pitchShift_ / 200);
-                for (int i = 0; i < _fftDataBlob.size() && i < 32; i++) {
-                    value += 0.5 * _fftDataBlob.at(i).amplitude *
-                        sin(M_2_PI * t * _fftDataBlob.at(i).frequency * fMult + _fftDataBlob.at(i).phase);
-                }
-            }
-            if (SYNTHTYPE == SynthType::ifft) {
-                auto i = outFrame_ - startOutFrame;
-                value = currentFftInverse_.at(outFrame_ - startOutFrame);
-                //0.5 * (1.0 + cos(2.0 * pi* x / (256 - 1.0))
-                //auto mult = 0.5 - 0.5 * (cos(2.0 * M_PI * k / (thisGrainSize - 1.0)));
-                value *= (1.0 + cos(2.0 * M_PI * i / (fft_.getWindowSize() - 1.0)));
-            }
-            value = value > 1.0 ? 1.0 : (value < -1.0 ? -1.0 : value);
-            auto int16Data = static_cast<AudioSample>(value * 32768.0f);
-            *out++ = int16Data;
-            *out++ = int16Data;
-
-            //out_.emplace_back(processed * 0.000030517578125f);//value);
-
-            //*out++ = processed;
-            //*out++ = processed;
-        }
-    } else {
-        DBGOUT("output buffer underrun");
-        for (; outFrame_ < endOutFrame; outFrame_++) {
-            *out++ = 0;
-            *out++ = 0;
-        }
-    }
-
-    return paContinue;
-}
-
-int
-PortAudioLayer::PortAudioLayerImpl::paInputCallback(    PortAudioLayer& parentLayer,
-                                                        const AudioSample* inputBuffer,
-                                                        AudioSample* outputBuffer,
-                                                        unsigned long framesPerBuffer,
-                                                        const PaStreamCallbackTimeInfo* timeInfo,
-                                                        PaStreamCallbackFlags statusFlags)
-{
-    // unused arguments
-    (void)outputBuffer;
-    (void)timeInfo;
-    (void)statusFlags;
-
-    if (framesPerBuffer == 0) {
-        DBGOUT("No frames for input.");
-        return paContinue;
-    }
-
-    auto endInFrame = inFrame_ + framesPerBuffer;
-    AudioSample *in = (AudioSample*)inputBuffer;
-
-    double gain = 1.0f;
-    double freq = 100.0f + pitchShift_;
-    auto elapsedTimePerFrame = 1.0 / static_cast<double>(parentLayer.audioFormat_.sample_rate);
-    auto periodFrames = static_cast<int>((1.0 / freq) / elapsedTimePerFrame);
-
-    for (; inFrame_ < endInFrame; inFrame_++) {
-        auto t = (inFrame_) * elapsedTimePerFrame;
-        auto value = sin(M_2_PI * t * freq);
-        //auto value = 0.5 * sin(M_2_PI * t * 354) + 0.5 * cos(M_2_PI * t * 649);
-        auto int16Data = static_cast<AudioSample>(value * gain * 32768.0f);
-
-        // generate sine test
-        //inputBuffer_.get()->tryPush(int16Data);
-
-        // mic test
-        inputBuffer_.get()->try_push(*in++);
-    }
-    fftCv_.notify_all();
-
-    return paContinue;
 }
 
 void
@@ -411,7 +300,7 @@ PortAudioLayer::PortAudioLayerImpl::initStream(PortAudioLayer& parent)
             &streams_[Direction::Output],
             indexOut_,
             Direction::Output,
-            fft_.getWindowSize(),
+            pitchShifter.grainSize_,
             [] (const void* inputBuffer,
             void* outputBuffer,
             unsigned long framesPerBuffer,
@@ -439,7 +328,7 @@ PortAudioLayer::PortAudioLayerImpl::initStream(PortAudioLayer& parent)
             &streams_[Direction::Input],
             indexIn_,
             Direction::Input,
-            fft_.getWindowSize(),
+            pitchShifter.grainSize_,
             [] (const void* inputBuffer,
             void* outputBuffer,
             unsigned long framesPerBuffer,
@@ -469,9 +358,11 @@ PortAudioLayer::PortAudioLayerImpl::initStream(PortAudioLayer& parent)
         }
     }
 
-    DBGOUT("Start FFT Handler");
-    fftThread_ = std::thread(&PortAudioLayerImpl::processFFT, this);
+    //DBGOUT("Start FFT Handler");
+    //fftThread_ = std::thread(&PortAudioLayerImpl::processFFT, this);
 }
+
+
 
 void
 PortAudioLayer::PortAudioLayerImpl::processFFT()
@@ -479,33 +370,260 @@ PortAudioLayer::PortAudioLayerImpl::processFFT()
     while (running_) {
         std::unique_lock<std::mutex> lk(fftMutex_);
         fftCv_.wait(lk, [this] {
-            return (inputBuffer_.get()->getBufSize() >= fft_.getWindowSize()) || !running_;
+            return (inBufPos >= fft_.getWindowSize()) || !running_;
         });
         if (!running_) {
             continue;
         }
+
+        auto grainSize = fft_.getWindowSize();
+
+        static float magnitude;
+        static float phase;
+        static float tmp;
+        static float window;
+        static float real = 0;
+        static float imag = 0;
+        static float freqPerBin;
+        static float expectedFreq;
+        static long qpd;
+        static long index;
+        static long latency;
+        static long stepSize;
+        static long fftFrameSize2;
+        static long overlap;
+        static int i, k;
+        if (inBufPos == 0) {
+            fftFrameSize2 = grainSize / 2;
+            stepSize = grainSize / overlap;
+            freqPerBin = SAMPLERATE / (double)grainSize;
+            expectedFreq = M_2_PI * (double)stepSize / (double)grainSize;
+            latency = grainSize - stepSize;
+            inBufPos = latency;
+        }
+
         AudioSample sample;
-        std::vector<double> data;
-        double value;
-        auto fftWindowSize = fft_.getWindowSize();
-        unsigned i = 0;
-        while (data.size() <= fftWindowSize) {
+        while (i <= grainSize) {
             if (!inputBuffer_.get()->try_pop(sample))
                 continue;
-            processedBuffer_.get()->try_push(sample);
-            value = lpFilter.processSample(sample * 0.000030517578125f);
-            double windowMult;
-            windowMult = 0.5 * (1.0 - cos(2.0 * M_PI * i / (fftWindowSize - 1.0)));
-            data.emplace_back(static_cast<double>(windowMult * value));
-            ++i;
+            pitchShifter.srcBuffer_[inBufPos - latency] = sample * INT16TOFLOAT;
+            processedBuffer_.get()->try_push(
+                pitchShifter.dstBuffer_[inBufPos - latency]
+            );
+            inBufPos++;
         }
-        /*fft_.setData(FFTDirection::In, data);
-        {
-            std::lock_guard<std::mutex> lk(fftDataMutex_);
-            currentFftData_ = fft_.computeStft();
-            if (SYNTHTYPE == SynthType::ifft) {
-                currentFftInverse_ = fft_.computeInverseStft();
-            }
-        }*/
     }
+}
+
+int
+PortAudioLayer::PortAudioLayerImpl::paOutputCallback(PortAudioLayer& parentLayer,
+    const AudioSample* inputBuffer,
+    AudioSample* outputBuffer,
+    unsigned long framesPerBuffer,
+    const PaStreamCallbackTimeInfo* timeInfo,
+    PaStreamCallbackFlags statusFlags)
+{
+    // unused arguments
+    (void)inputBuffer;
+    (void)timeInfo;
+    (void)statusFlags;
+    (void)inputBuffer;
+
+    if (framesPerBuffer == 0) {
+        DBGOUT("No frames for output.");
+        return paContinue;
+    }
+
+    auto startOutFrame = outFrame_;
+    auto endOutFrame = outFrame_ + framesPerBuffer;
+    AudioSample *out = (AudioSample*)outputBuffer;
+
+    auto pitchShiftRatio = pitchShift_;
+
+    auto elapsedTimePerFrame = 1.0 / static_cast<double>(parentLayer.audioFormat_.sample_rate);
+    for (; outFrame_ < endOutFrame; outFrame_++) {
+        auto t = (outFrame_)* elapsedTimePerFrame;
+
+        auto grainSize = pitchShifter.grainSize_;
+
+        static float magnitude;
+        static float phase;
+        static float tmp;
+        static float window;
+        static float real = 0;
+        static float imag = 0;
+        static float freqPerBin;
+        static float expectedFreq;
+        static long qpd;
+        static long index;
+        static long latency;
+        static long stepSize;
+        static long fftFrameSize2;
+        static long overlap = 8;
+        static int i, k;
+        if (inBufPos == 0) {
+            fftFrameSize2 = grainSize / 2;
+            stepSize = grainSize / overlap;
+            freqPerBin = SAMPLERATE / (double)grainSize;
+            expectedFreq = M_2_PI * (double)stepSize / (double)grainSize;
+            latency = grainSize - stepSize;
+            inBufPos = latency;
+        }
+
+        AudioSample sample;
+        inputBuffer_.get()->try_pop(sample);
+        pitchShifter.srcBuffer_[inBufPos] = sample * INT16TOFLOAT;
+        auto processed = pitchShifter.dstBuffer_[inBufPos - latency];
+        auto int16Data = static_cast<AudioSample>(processed * FLOATTOINT16);
+        *out++ = int16Data;
+        *out++ = int16Data;
+        inBufPos++;
+
+        if (inBufPos >= grainSize) {
+            inBufPos = latency;
+
+            for (k = 0; k < grainSize; k++) {
+                window = -.5*cos(M_2_PI * (double)k / (double)grainSize) + .5;
+                FFT_R(pitchShifter.fftData_, k) = pitchShifter.srcBuffer_[k] * window;
+                FFT_I(pitchShifter.fftData_, k) = 0.;
+            }
+
+            fft_.computeA(&pitchShifter.fftData_[0]);
+            for (k = 0; k <= fftFrameSize2; k++) {
+                real = FFT_R(pitchShifter.fftData_, k);
+                imag = FFT_I(pitchShifter.fftData_, k);
+
+                magnitude = 2. * sqrt(real*real + imag*imag);
+                phase = atan2(imag, real);
+
+                /* compute phase difference */
+                tmp = phase - pitchShifter.lastPhase_[k];
+                pitchShifter.lastPhase_[k] = phase;
+
+                /* subtract expected phase difference */
+                tmp -= (double)k * expectedFreq;
+
+                /* map delta phase into +/- Pi interval */
+                qpd = tmp / M_PI;
+                if (qpd >= 0) qpd += qpd & 1;
+                else qpd -= qpd & 1;
+                tmp -= M_PI * (double)qpd;
+
+                /* get deviation from bin frequency from the +/- Pi interval */
+                tmp = overlap * tmp / (M_2_PI);
+
+                /* compute the k-th partials' true frequency */
+                tmp = (double)k*freqPerBin + tmp*freqPerBin;
+
+                /* store magnitude and true frequency in analysis arrays */
+                pitchShifter.analysisMag_[k] = magnitude;
+                pitchShifter.analysisFrq_[k] = tmp;
+            }
+
+            memset(&pitchShifter.synthesisMag_, 0, grainSize * sizeof(float));
+            memset(&pitchShifter.synthesisFrq_, 0, grainSize * sizeof(float));
+            for (k = 0; k <= fftFrameSize2; k++) {
+                index = k*pitchShiftRatio;
+                if (index <= fftFrameSize2) {
+                    pitchShifter.synthesisMag_[index] = pitchShifter.analysisMag_[k];
+                    pitchShifter.synthesisFrq_[index] = pitchShifter.analysisFrq_[k] * pitchShiftRatio;
+                }
+            }
+
+            for (k = 0; k <= fftFrameSize2; k++) {
+                /* get magnitude and true frequency from synthesis arrays */
+                magnitude = pitchShifter.synthesisMag_[k];
+                tmp = pitchShifter.synthesisFrq_[k];
+
+                /* subtract bin mid frequency */
+                tmp -= (double)k*freqPerBin;
+
+                /* get bin deviation from freq deviation */
+                tmp /= freqPerBin;
+
+                /* take overlappingSamples into account */
+                tmp = M_2_PI * tmp / overlap;
+
+                /* add the overlap phase advance back in */
+                tmp += (double)k*expectedFreq;
+
+                /* accumulate delta phase to get bin phase */
+                pitchShifter.sumPhase_[k] += tmp;
+                phase = pitchShifter.sumPhase_[k];
+
+                /* get real and imag part and re-interleave */
+                FFT_R(pitchShifter.fftData_, k) = magnitude*cos(phase);
+                FFT_I(pitchShifter.fftData_, k) = magnitude*sin(phase);
+            }
+
+            /* zero negative frequencies */
+            for (k = grainSize / 2; k < grainSize; k++) {
+                FFT_R(pitchShifter.fftData_, k) = 0;
+                FFT_I(pitchShifter.fftData_, k) = 0;
+            }
+
+            /* do inverse transform */
+            fft_.computeInverseA(&pitchShifter.fftData_[0]);
+
+            /* do windowing and add to output accumulator */
+            double crossfadeSize = grainSize - stepSize;
+            for (k = 0; k < grainSize; k++) {
+                window = -.5 * cos(M_2_PI * (double)k / (double)grainSize) + .5;
+                pitchShifter.outputAccum_[k] += 2. * window * FFT_R(pitchShifter.fftData_, k) / (fftFrameSize2 * overlap);
+            }
+            for (k = 0; k < stepSize; k++) {
+                pitchShifter.dstBuffer_[k] = pitchShifter.outputAccum_[k];
+            }
+
+            /* shift accumulator */
+            std::memmove(&pitchShifter.outputAccum_[0], &pitchShifter.outputAccum_[0] + stepSize, grainSize * sizeof(double));
+
+            /* move input FIFO */
+            for (k = 0; k < latency; k++) {
+                pitchShifter.srcBuffer_[k] = pitchShifter.srcBuffer_[k + stepSize];
+            }
+        }
+    }
+
+    return paContinue;
+}
+
+int
+PortAudioLayer::PortAudioLayerImpl::paInputCallback(PortAudioLayer& parentLayer,
+    const AudioSample* inputBuffer,
+    AudioSample* outputBuffer,
+    unsigned long framesPerBuffer,
+    const PaStreamCallbackTimeInfo* timeInfo,
+    PaStreamCallbackFlags statusFlags)
+{
+    // unused arguments
+    (void)outputBuffer;
+    (void)timeInfo;
+    (void)statusFlags;
+
+    if (framesPerBuffer == 0) {
+        DBGOUT("No frames for input.");
+        return paContinue;
+    }
+
+    auto endInFrame = inFrame_ + framesPerBuffer;
+    AudioSample *in = (AudioSample*)inputBuffer;
+
+    double gain = 1.0f;
+    double freq = 440.0f;
+    auto elapsedTimePerFrame = 1.0 / static_cast<double>(parentLayer.audioFormat_.sample_rate);
+    auto periodFrames = static_cast<int>((1.0 / freq) / elapsedTimePerFrame);
+
+    for (; inFrame_ < endInFrame; inFrame_++) {
+        // generate sine
+        /*auto t = (inFrame_)* elapsedTimePerFrame;
+        auto value = sin(M_2_PI * t * freq);
+        auto int16Data = static_cast<AudioSample>(value * gain * FLOATTOINT16);
+        inputBuffer_.get()->try_push(int16Data);*/
+
+        // mic input
+        inputBuffer_.get()->try_push(*in++);
+    }
+
+    return paContinue;
 }

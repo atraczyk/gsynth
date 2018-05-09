@@ -12,6 +12,11 @@
 #define M_2_PI   6.28318530717958647692528676655900576
 #endif
 
+#define INT16TOFLOAT 0.000030517578125f
+#define FLOATTOINT16 32768.0f
+
+#define SAMPLERATE 48000
+
 enum SynthType {
     resynth = 0,
     ifft = 1,

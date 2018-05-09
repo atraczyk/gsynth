@@ -12,8 +12,6 @@
 
 #include "pa_layer.h"
 
-#define SAMPLERATE 48000
-
 class App {
 private:
     App();

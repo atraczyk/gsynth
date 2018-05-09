@@ -2,7 +2,6 @@
 
 #include <vector>
 
-#include "ringbuffer.h"
 #include "fft.h"
 
 constexpr const uint32_t maxFrameLength = 4096;
@@ -29,9 +28,13 @@ public:
         float* source,
         float* out);
 
-private:
-    std::array<float, maxFrameLength>           srcRingBuffer_{};
-    std::array<float, maxFrameLength>           dstRingBuffer_{};
+    std::array<float, maxFrameLength>           srcBuffer_{};
+    std::array<float, maxFrameLength>           dstBuffer_{};
+
+    uint32_t        sampleRate_;
+    uint32_t        grainSize_;
+    uint32_t        overlap_;
+
     std::array<kiss_fft_cpx, maxFrameLength>    fftData_{};
     std::array<float, maxFrameLength / 2 + 1>   lastPhase_{};
     std::array<float, maxFrameLength / 2 + 1>   sumPhase_{};
@@ -41,11 +44,10 @@ private:
     std::array<float, maxFrameLength>           synthesisFrq_{};
     std::array<float, maxFrameLength>           synthesisMag_{};
 
-    lock_free_queue<float>                      srcRingBuffer0_{};
-    lock_free_queue<float>                      dstRingBuffer0_{};
-
-    uint32_t        sampleRate_;
-    uint32_t        grainSize_;
-    uint32_t        overlap_;
     fft_wrapper     fft_;
+
+private:
+    
+
+    
 };

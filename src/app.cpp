@@ -1,5 +1,6 @@
 #include "app.h"
 #include "Log.hpp"
+#include "common.h"
 
 #ifdef _WIN32
 #include <conio.h>
@@ -113,7 +114,7 @@ void App::execute(int argc, char* argv[])
 
     SDL_Event event;
     
-    float pitchShift = 0.0;
+    float pitchShift = 1.0;
 
     while (running_) {
         while (SDL_PollEvent(&event) != 0) {
@@ -130,13 +131,17 @@ void App::execute(int argc, char* argv[])
                             running_ = false;
                             break;
                         case SDLK_UP:
-                            pitchShift += 1;
-                            std::cout << "pitchShift " << pitchShift << "\n";
+                            pitchShift += .01;
+                            pitchShift = pitchShift > 2.0 ? 2.0 : pitchShift;
+                            std::cout << std::setprecision(2) 
+                                << "pitchShift " << pitchShift << "\n";
                             paLayer.setPitchShift(pitchShift);
                             break;
                         case SDLK_DOWN:
-                            pitchShift -= 1;
-                            std::cout << "pitchShift " << pitchShift << "\n";
+                            pitchShift -= .01;
+                            pitchShift = pitchShift < 0.5 ? 0.5 : pitchShift;
+                            std::cout << std::setprecision(2)
+                                << "pitchShift " << pitchShift << "\n";
                             paLayer.setPitchShift(pitchShift);
                             break;
                         default:
